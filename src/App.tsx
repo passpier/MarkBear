@@ -26,6 +26,7 @@ function App() {
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
   const hasInitializedDocument = useRef(false);
   const editor = useEditorStore((state) => state.editor);
+  const menuUnlistenersRef = useRef<Array<() => void>>([]);
 
   // Initialize auto-save
   useAutoSave();
@@ -165,7 +166,7 @@ function App() {
 
   // Native menu events
   useEffect(() => {
-    let unlisteners: Array<() => void> = [];
+    let isActive = true;
 
     const setupListeners = async () => {
       try {
@@ -200,8 +201,13 @@ function App() {
             }
           ),
         ]);
-        
-        unlisteners = listeners;
+
+        if (!isActive) {
+          listeners.forEach((unlisten) => unlisten());
+          return;
+        }
+
+        menuUnlistenersRef.current = listeners;
       } catch (error) {
         console.error('Failed to setup menu event listeners:', error);
       }
@@ -210,7 +216,9 @@ function App() {
     void setupListeners();
 
     return () => {
-      unlisteners.forEach(unlisten => unlisten());
+      isActive = false;
+      menuUnlistenersRef.current.forEach(unlisten => unlisten());
+      menuUnlistenersRef.current = [];
     };
   }, [editor, activeDocumentId, createNewDocument, closeDocument, toggleSidebar, toggleTheme]);
 

@@ -1,0 +1,9 @@
+{
+  "identifier": "main-event-listen",
+  "description": "Allow main window to listen/unlisten to core events.",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
+}
