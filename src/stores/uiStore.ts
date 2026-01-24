@@ -21,7 +21,7 @@ export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
       theme: 'light',
-      sidebarVisible: true,
+      sidebarVisible: false,
       fontSize: 16,
       fontFamily: 'system-ui, -apple-system, sans-serif',
       sidebarWidth: 280,

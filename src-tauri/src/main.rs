@@ -146,6 +146,20 @@ fn file_exists(path: String) -> bool {
     PathBuf::from(path).exists()
 }
 
+#[derive(Serialize, Clone)]
+struct MenuCommandPayload {
+    command: String,
+    level: Option<u8>,
+}
+
+fn emit_editor_command(app: &tauri::AppHandle, command: &str, level: Option<u8>) {
+    let payload = MenuCommandPayload {
+        command: command.to_string(),
+        level,
+    };
+    let _ = app.emit("menu-editor-command", payload);
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
@@ -169,13 +183,41 @@ fn main() {
                 true,
                 Some("CmdOrCtrl+O"),
             )?;
-            let separator = PredefinedMenuItem::separator(handle)?;
+            let save_item = MenuItem::with_id(
+                handle,
+                "file_save",
+                "Save",
+                true,
+                Some("CmdOrCtrl+S"),
+            )?;
+            let save_as_item = MenuItem::with_id(
+                handle,
+                "file_save_as",
+                "Save As...",
+                true,
+                Some("CmdOrCtrl+Shift+S"),
+            )?;
+            let close_document_item = MenuItem::with_id(
+                handle,
+                "file_close_document",
+                "Close Document",
+                true,
+                Some("CmdOrCtrl+W"),
+            )?;
+            let file_separator = PredefinedMenuItem::separator(handle)?;
 
             let mut file_menu_found = false;
             for item in menu.items()? {
                 if let Some(submenu) = item.as_submenu() {
                     if submenu.text()? == "File" {
-                        submenu.prepend_items(&[&new_item, &open_item, &separator])?;
+                        submenu.prepend_items(&[
+                            &new_item,
+                            &open_item,
+                            &save_item,
+                            &save_as_item,
+                            &close_document_item,
+                            &file_separator,
+                        ])?;
                         file_menu_found = true;
                         break;
                     }
@@ -190,11 +232,211 @@ fn main() {
                     &[
                         &new_item,
                         &open_item,
-                        &separator,
-                        &PredefinedMenuItem::close_window(handle, None)?,
+                        &file_separator,
+                        &save_item,
+                        &save_as_item,
+                        &close_document_item,
+                        &PredefinedMenuItem::close_window(handle, Some("CmdOrCtrl+Shift+W"))?,
                     ],
                 )?;
                 menu.append(&file_menu)?;
+            }
+
+            let bold_item = MenuItem::with_id(
+                handle,
+                "editor_bold",
+                "Bold",
+                true,
+                Some("CmdOrCtrl+B"),
+            )?;
+            let italic_item = MenuItem::with_id(
+                handle,
+                "editor_italic",
+                "Italic",
+                true,
+                Some("CmdOrCtrl+I"),
+            )?;
+            let strike_item = MenuItem::with_id(
+                handle,
+                "editor_strike",
+                "Strikethrough",
+                true,
+                Some("CmdOrCtrl+Shift+X"),
+            )?;
+            let inline_code_item = MenuItem::with_id(
+                handle,
+                "editor_inline_code",
+                "Inline Code",
+                true,
+                Some("CmdOrCtrl+Shift+C"),
+            )?;
+            let paragraph_item = MenuItem::with_id(
+                handle,
+                "editor_paragraph",
+                "Paragraph",
+                true,
+                None::<&str>,
+            )?;
+            let heading_1_item = MenuItem::with_id(
+                handle,
+                "editor_heading_1",
+                "Heading 1",
+                true,
+                Some("CmdOrCtrl+Option+1"),
+            )?;
+            let heading_2_item = MenuItem::with_id(
+                handle,
+                "editor_heading_2",
+                "Heading 2",
+                true,
+                Some("CmdOrCtrl+Option+2"),
+            )?;
+            let heading_3_item = MenuItem::with_id(
+                handle,
+                "editor_heading_3",
+                "Heading 3",
+                true,
+                Some("CmdOrCtrl+Option+3"),
+            )?;
+            let heading_4_item = MenuItem::with_id(
+                handle,
+                "editor_heading_4",
+                "Heading 4",
+                true,
+                Some("CmdOrCtrl+Option+4"),
+            )?;
+            let heading_5_item = MenuItem::with_id(
+                handle,
+                "editor_heading_5",
+                "Heading 5",
+                true,
+                Some("CmdOrCtrl+Option+5"),
+            )?;
+            let heading_6_item = MenuItem::with_id(
+                handle,
+                "editor_heading_6",
+                "Heading 6",
+                true,
+                Some("CmdOrCtrl+Option+6"),
+            )?;
+            let bullet_list_item = MenuItem::with_id(
+                handle,
+                "editor_bullet_list",
+                "Bullet List",
+                true,
+                Some("CmdOrCtrl+Shift+8"),
+            )?;
+            let ordered_list_item = MenuItem::with_id(
+                handle,
+                "editor_ordered_list",
+                "Ordered List",
+                true,
+                Some("CmdOrCtrl+Shift+7"),
+            )?;
+            let blockquote_item = MenuItem::with_id(
+                handle,
+                "editor_blockquote",
+                "Blockquote",
+                true,
+                None::<&str>,
+            )?;
+            let code_block_item = MenuItem::with_id(
+                handle,
+                "editor_code_block",
+                "Code Block",
+                true,
+                None::<&str>,
+            )?;
+            let horizontal_rule_item = MenuItem::with_id(
+                handle,
+                "editor_horizontal_rule",
+                "Horizontal Rule",
+                true,
+                None::<&str>,
+            )?;
+
+            let text_menu = Submenu::with_items(
+                handle,
+                "Text",
+                true,
+                &[
+                    &bold_item,
+                    &italic_item,
+                    &strike_item,
+                    &inline_code_item,
+                ],
+            )?;
+            let heading_menu = Submenu::with_items(
+                handle,
+                "Headings",
+                true,
+                &[
+                    &paragraph_item,
+                    &heading_1_item,
+                    &heading_2_item,
+                    &heading_3_item,
+                    &heading_4_item,
+                    &heading_5_item,
+                    &heading_6_item,
+                ],
+            )?;
+            let list_menu = Submenu::with_items(
+                handle,
+                "Lists",
+                true,
+                &[&bullet_list_item, &ordered_list_item],
+            )?;
+            let block_menu = Submenu::with_items(
+                handle,
+                "Blocks",
+                true,
+                &[&blockquote_item, &code_block_item, &horizontal_rule_item],
+            )?;
+            let format_menu = Submenu::with_items(
+                handle,
+                "Format",
+                true,
+                &[&text_menu, &heading_menu, &list_menu, &block_menu],
+            )?;
+            menu.append(&format_menu)?;
+
+            let toggle_sidebar_item = MenuItem::with_id(
+                handle,
+                "view_toggle_sidebar",
+                "Toggle Sidebar",
+                true,
+                None::<&str>,
+            )?;
+            let toggle_theme_item = MenuItem::with_id(
+                handle,
+                "view_toggle_theme",
+                "Toggle Theme",
+                true,
+                Some("CmdOrCtrl+T"),
+            )?;
+            let view_separator = PredefinedMenuItem::separator(handle)?;
+            let mut view_menu_found = false;
+            for item in menu.items()? {
+                if let Some(submenu) = item.as_submenu() {
+                    if submenu.text()? == "View" {
+                        submenu.prepend_items(&[
+                            &toggle_sidebar_item,
+                            &toggle_theme_item,
+                            &view_separator,
+                        ])?;
+                        view_menu_found = true;
+                        break;
+                    }
+                }
+            }
+            if !view_menu_found {
+                let view_menu = Submenu::with_items(
+                    handle,
+                    "View",
+                    true,
+                    &[&toggle_sidebar_item, &toggle_theme_item],
+                )?;
+                menu.append(&view_menu)?;
             }
 
             Ok(menu)
@@ -204,6 +446,48 @@ fn main() {
                 let _ = app.emit("menu-new-file", ());
             } else if event.id() == "file_open" {
                 let _ = app.emit("menu-open-file", ());
+            } else if event.id() == "file_save" {
+                let _ = app.emit("menu-save-file", ());
+            } else if event.id() == "file_save_as" {
+                let _ = app.emit("menu-save-as", ());
+            } else if event.id() == "file_close_document" {
+                let _ = app.emit("menu-close-document", ());
+            } else if event.id() == "view_toggle_sidebar" {
+                let _ = app.emit("menu-toggle-sidebar", ());
+            } else if event.id() == "view_toggle_theme" {
+                let _ = app.emit("menu-toggle-theme", ());
+            } else if event.id() == "editor_bold" {
+                emit_editor_command(app, "bold", None);
+            } else if event.id() == "editor_italic" {
+                emit_editor_command(app, "italic", None);
+            } else if event.id() == "editor_strike" {
+                emit_editor_command(app, "strike", None);
+            } else if event.id() == "editor_inline_code" {
+                emit_editor_command(app, "inline_code", None);
+            } else if event.id() == "editor_paragraph" {
+                emit_editor_command(app, "paragraph", None);
+            } else if event.id() == "editor_heading_1" {
+                emit_editor_command(app, "heading", Some(1));
+            } else if event.id() == "editor_heading_2" {
+                emit_editor_command(app, "heading", Some(2));
+            } else if event.id() == "editor_heading_3" {
+                emit_editor_command(app, "heading", Some(3));
+            } else if event.id() == "editor_heading_4" {
+                emit_editor_command(app, "heading", Some(4));
+            } else if event.id() == "editor_heading_5" {
+                emit_editor_command(app, "heading", Some(5));
+            } else if event.id() == "editor_heading_6" {
+                emit_editor_command(app, "heading", Some(6));
+            } else if event.id() == "editor_bullet_list" {
+                emit_editor_command(app, "bullet_list", None);
+            } else if event.id() == "editor_ordered_list" {
+                emit_editor_command(app, "ordered_list", None);
+            } else if event.id() == "editor_blockquote" {
+                emit_editor_command(app, "blockquote", None);
+            } else if event.id() == "editor_code_block" {
+                emit_editor_command(app, "code_block", None);
+            } else if event.id() == "editor_horizontal_rule" {
+                emit_editor_command(app, "horizontal_rule", None);
             }
         })
         .invoke_handler(tauri::generate_handler![

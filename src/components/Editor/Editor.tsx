@@ -8,6 +8,7 @@ import { common, createLowlight } from 'lowlight';
 import { useEffect } from 'react';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useEditorStore } from '@/stores/editorStore';
 import { debounce } from '@/lib/utils';
 
 const lowlight = createLowlight(common);
@@ -21,6 +22,7 @@ export function Editor({ documentId }: EditorProps) {
   const updateContent = useDocumentStore((state) => state.updateContent);
   const fontSize = useUIStore((state) => state.fontSize);
   const fontFamily = useUIStore((state) => state.fontFamily);
+  const setEditor = useEditorStore((state) => state.setEditor);
 
   const document = documents.find(d => d.id === documentId);
 
@@ -58,6 +60,11 @@ export function Editor({ documentId }: EditorProps) {
       updateContent(documentId, markdown);
     }, 500),
   });
+
+  useEffect(() => {
+    setEditor(editor ?? null);
+    return () => setEditor(null);
+  }, [editor, setEditor]);
 
   // Update editor content when document changes
   useEffect(() => {
