@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { Editor } from '@/components/Editor/Editor';
@@ -37,6 +37,7 @@ function App() {
   const toggleTheme = useUIStore((state) => state.toggleTheme);
   const sidebarVisible = useUIStore((state) => state.sidebarVisible);
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
+  const hasInitializedDocument = useRef(false);
 
   // Initialize auto-save
   useAutoSave();
@@ -57,6 +58,14 @@ function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
+
+  // Ensure a blank document exists for first launch
+  useEffect(() => {
+    if (!hasInitializedDocument.current && documents.length === 0 && !activeDocumentId) {
+      createNewDocument();
+      hasInitializedDocument.current = true;
+    }
+  }, [documents.length, activeDocumentId, createNewDocument]);
 
   const handleOpenFile = async () => {
     try {
@@ -324,6 +333,10 @@ function App() {
                 <p className="text-sm mt-2">
                   Create a new document or open an existing one
                 </p>
+                <div className="mt-6 flex items-center justify-center gap-2 text-sm">
+                  <span className="inline-block w-0.5 h-5 bg-muted-foreground/70 animate-pulse" />
+                  <span>Start writing...</span>
+                </div>
               </div>
             </div>
           )}

@@ -14,7 +14,6 @@ import {
   List,
   ListOrdered,
   Quote,
-  CodeSquare,
   Minus,
   ChevronDown,
 } from 'lucide-react';
@@ -163,7 +162,7 @@ export function Toolbar({ editor }: ToolbarProps) {
             onClick={() => editor.chain().focus().toggleCodeBlock().run()}
             className={cn(editor.isActive('codeBlock') && 'bg-accent')}
           >
-            <CodeSquare className="w-4 h-4" />
+            <Code className="w-4 h-4" />
           </Button>
         </Tooltip>
 
