@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { open, save } from '@tauri-apps/plugin-dialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Editor } from '@/components/Editor/Editor';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -41,6 +42,28 @@ function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
+
+  const getDocumentTitle = () => {
+    if (!activeDocument) return 'Markdown Editor';
+
+    const fileName = activeDocument.path
+      ? activeDocument.path.split('/').pop() ?? 'Untitled'
+      : 'Untitled';
+    const editedSuffix = activeDocument.isDirty ? ' • Edited' : '';
+
+    return `${fileName}${editedSuffix} - Markdown Editor`;
+  };
+
+  useEffect(() => {
+    try {
+      const currentWindow = getCurrentWindow();
+      const title = getDocumentTitle();
+      document.title = title;
+      void currentWindow.setTitle(title);
+    } catch (error) {
+      console.warn('Failed to update window title:', error);
+    }
+  }, [activeDocument?.path, activeDocument?.isDirty]);
 
   // Ensure a blank document exists for first launch
   useEffect(() => {
