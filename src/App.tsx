@@ -1,7 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { platform } from '@tauri-apps/plugin-os';
+import { WindowTitlebar } from 'tauri-controls';
 import { Editor } from '@/components/Editor/Editor';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -10,6 +12,7 @@ import { useEditorStore } from '@/stores/editorStore';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import {
   FileText,
+  PanelLeft,
 } from 'lucide-react';
 
 function App() {
@@ -28,6 +31,7 @@ function App() {
   const hasInitializedDocument = useRef(false);
   const editor = useEditorStore((state) => state.editor);
   const menuUnlistenersRef = useRef<Array<() => void>>([]);
+  const [osPlatform, setOsPlatform] = useState<'macos' | 'windows' | 'gnome' | null>(null);
 
   // Initialize auto-save
   useAutoSave();
@@ -42,6 +46,30 @@ function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
+
+  useEffect(() => {
+    let isActive = true;
+    const loadPlatform = async () => {
+      try {
+        const detected = await platform();
+        if (!isActive) return;
+        if (detected === 'macos') {
+          setOsPlatform('macos');
+        } else if (detected === 'windows') {
+          setOsPlatform('windows');
+        } else {
+          setOsPlatform('gnome');
+        }
+      } catch (error) {
+        console.warn('Failed to detect platform:', error);
+      }
+    };
+
+    void loadPlatform();
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const getDocumentTitle = () => {
     if (!activeDocument) return 'Markdown Editor';
@@ -64,6 +92,13 @@ function App() {
       console.warn('Failed to update window title:', error);
     }
   }, [activeDocument?.path, activeDocument?.isDirty]);
+
+  const documentTitle = (() => {
+    if (!activeDocument) return 'Markdown Editor';
+    return activeDocument.path
+      ? activeDocument.path.split('/').pop() ?? 'Untitled'
+      : 'Untitled';
+  })();
 
   // Ensure a blank document exists for first launch
   useEffect(() => {
@@ -245,8 +280,59 @@ function App() {
     };
   }, [editor, activeDocumentId, createNewDocument, closeDocument, toggleSidebar, toggleTheme]);
 
+  const titlebarClassName = useMemo(() => {
+    if (osPlatform === 'macos') {
+      return 'h-7 flex items-center border-b bg-background/95 px-3';
+    }
+    return 'h-10 flex items-center border-b bg-background/95 px-2';
+  }, [osPlatform]);
+
+  const handleTitlebarMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('.titlebar-no-drag')) {
+      return;
+    }
+    try {
+      const currentWindow = getCurrentWindow();
+      void currentWindow.startDragging();
+    } catch (error) {
+      console.warn('Failed to start dragging:', error);
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col">
+      <WindowTitlebar
+        className={`${titlebarClassName} titlebar-drag`}
+        controlsOrder="system"
+        windowControlsProps={{
+          justify: true,
+          platform: osPlatform ?? undefined,
+          hide: osPlatform === 'macos',
+        }}
+        data-tauri-drag-region
+        onMouseDown={handleTitlebarMouseDown}
+      >
+        <div className="flex w-full items-center gap-2 titlebar-drag" data-tauri-drag-region>
+          <div
+            className="flex flex-1 items-center justify-center gap-2 text-sm font-medium text-foreground/90 min-w-0 titlebar-drag"
+            data-tauri-drag-region
+          >
+            <span className="truncate">{documentTitle}</span>
+            {activeDocument?.isDirty && (
+              <span className="text-xs font-semibold text-amber-500">Edited</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground titlebar-no-drag"
+            aria-label="Toggle sidebar"
+            data-tauri-drag-region="false"
+          >
+            <PanelLeft className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </WindowTitlebar>
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}

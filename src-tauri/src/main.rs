@@ -162,6 +162,7 @@ fn emit_editor_command(app: &tauri::AppHandle, command: &str, level: Option<u8>)
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
