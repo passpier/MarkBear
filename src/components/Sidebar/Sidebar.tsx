@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -29,7 +29,13 @@ export function Sidebar() {
     setLoading(true);
     try {
       const entries = await invoke<FileEntry[]>('list_directory', { path });
-      setFiles(entries);
+      const filtered = entries.filter(
+        (entry) =>
+          entry.is_directory ||
+          entry.name.endsWith('.md') ||
+          entry.name.endsWith('.markdown'),
+      );
+      setFiles(filtered);
       setCurrentDirectory(path);
     } catch (error) {
       console.error('Failed to load directory:', error);

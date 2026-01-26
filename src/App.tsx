@@ -393,11 +393,14 @@ function App() {
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        {sidebarVisible && (
-          <div className="w-72 flex-shrink-0">
-            <Sidebar />
-          </div>
-        )}
+        <div
+          className={`flex-shrink-0 transition-[width] duration-200 ${
+            sidebarVisible ? 'w-72' : 'w-0 overflow-hidden pointer-events-none'
+          }`}
+          aria-hidden={!sidebarVisible}
+        >
+          <Sidebar />
+        </div>
 
         {/* Editor Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
