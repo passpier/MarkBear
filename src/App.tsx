@@ -32,6 +32,7 @@ function App() {
   const editor = useEditorStore((state) => state.editor);
   const menuUnlistenersRef = useRef<Array<() => void>>([]);
   const [osPlatform, setOsPlatform] = useState<'macos' | 'windows' | 'gnome' | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Initialize auto-save
   useAutoSave();
@@ -92,6 +93,45 @@ function App() {
       console.warn('Failed to update window title:', error);
     }
   }, [activeDocument?.path, activeDocument?.isDirty]);
+
+  useEffect(() => {
+    let isActive = true;
+    let unlistenResize: (() => void) | undefined;
+    const currentWindow = getCurrentWindow();
+
+    const syncFullscreenState = async () => {
+      try {
+        const fullscreen = await currentWindow.isFullscreen();
+        if (isActive) {
+          setIsFullscreen(fullscreen);
+        }
+      } catch (error) {
+        console.warn('Failed to read fullscreen state:', error);
+      }
+    };
+
+    void syncFullscreenState();
+
+    currentWindow
+      .onResized(() => {
+        void syncFullscreenState();
+      })
+      .then((unlisten) => {
+        if (!isActive) {
+          unlisten();
+          return;
+        }
+        unlistenResize = unlisten;
+      })
+      .catch((error) => {
+        console.warn('Failed to listen for resize events:', error);
+      });
+
+    return () => {
+      isActive = false;
+      unlistenResize?.();
+    };
+  }, []);
 
   const documentTitle = (() => {
     if (!activeDocument) return 'Markdown Editor';
@@ -303,38 +343,53 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col">
-      <WindowTitlebar
-        className={`${titlebarClassName} titlebar-drag`}
-        controlsOrder="system"
-        windowControlsProps={{
-          justify: true,
-          platform: osPlatform ?? undefined,
-          hide: osPlatform === 'macos',
-        }}
-        data-tauri-drag-region
-        onMouseDown={handleTitlebarMouseDown}
-      >
-        <div className="flex w-full items-center gap-2 titlebar-drag" data-tauri-drag-region>
-          <div
-            className="flex flex-1 items-center justify-center gap-2 text-sm font-medium text-foreground/90 min-w-0 titlebar-drag"
-            data-tauri-drag-region
-          >
-            <span className="truncate">{documentTitle}</span>
-            {activeDocument?.isDirty && (
-              <span className="text-xs font-semibold text-amber-500">Edited</span>
+      {!isFullscreen && (
+        <WindowTitlebar
+          className={`${titlebarClassName} titlebar-drag`}
+          controlsOrder="system"
+          windowControlsProps={{
+            justify: true,
+            platform: osPlatform ?? undefined,
+            hide: osPlatform === 'macos',
+          }}
+          data-tauri-drag-region
+          onMouseDown={handleTitlebarMouseDown}
+        >
+          <div className="flex w-full items-center gap-2 titlebar-drag" data-tauri-drag-region>
+            {osPlatform !== 'macos' && (
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground titlebar-no-drag"
+                aria-label="Toggle sidebar"
+                data-tauri-drag-region="false"
+              >
+                <PanelLeft className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <div
+              className="flex flex-1 items-center justify-center gap-2 text-sm font-medium text-foreground/90 min-w-0 titlebar-drag"
+              data-tauri-drag-region
+            >
+              <span className="truncate">{documentTitle}</span>
+              {activeDocument?.isDirty && (
+                <span className="text-xs font-semibold text-amber-500">Edited</span>
+              )}
+            </div>
+            {osPlatform === 'macos' && (
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground titlebar-no-drag"
+                aria-label="Toggle sidebar"
+                data-tauri-drag-region="false"
+              >
+                <PanelLeft className="h-3.5 w-3.5" />
+              </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground titlebar-no-drag"
-            aria-label="Toggle sidebar"
-            data-tauri-drag-region="false"
-          >
-            <PanelLeft className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </WindowTitlebar>
+        </WindowTitlebar>
+      )}
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
