@@ -5,10 +5,11 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Typography from '@tiptap/extension-typography';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useEditorStore } from '@/stores/editorStore';
+import { useEditorLayout } from '@/hooks/useEditorLayout';
 import { debounce } from '@/lib/utils';
 
 const lowlight = createLowlight(common);
@@ -23,6 +24,8 @@ export function Editor({ documentId }: EditorProps) {
   const fontSize = useUIStore((state) => state.fontSize);
   const fontFamily = useUIStore((state) => state.fontFamily);
   const setEditor = useEditorStore((state) => state.setEditor);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const layoutMetrics = useEditorLayout(containerRef);
 
   const document = documents.find(d => d.id === documentId);
 
@@ -51,7 +54,7 @@ export function Editor({ documentId }: EditorProps) {
     content: document?.content || '',
     editorProps: {
       attributes: {
-        class: 'tiptap prose prose-sm sm:prose lg:prose-lg xl:prose-xl focus:outline-none max-w-none',
+        class: 'tiptap prose prose-sm sm:prose lg:prose-lg xl:prose-lg focus:outline-none w-full max-w-4xl',
         spellcheck: 'true',
       },
     },
@@ -73,14 +76,18 @@ export function Editor({ documentId }: EditorProps) {
     }
   }, [document?.content, editor, documentId]);
 
-  // Apply font settings
+  // Apply font settings and responsive layout
   useEffect(() => {
     if (editor) {
       const editorElement = editor.view.dom;
       editorElement.style.fontSize = `${fontSize}px`;
       editorElement.style.fontFamily = fontFamily;
+      
+      // Apply responsive width based on layout metrics
+      editorElement.style.maxWidth = `${layoutMetrics.contentWidth}px`;
+      editorElement.style.width = '100%';
     }
-  }, [fontSize, fontFamily, editor]);
+  }, [fontSize, fontFamily, editor, layoutMetrics.contentWidth]);
 
   if (!document) {
     return (
@@ -91,8 +98,19 @@ export function Editor({ documentId }: EditorProps) {
   }
 
   return (
-    <div className="h-full overflow-auto">
-      <EditorContent editor={editor} className="h-full" />
+    <div 
+      ref={containerRef}
+      className="h-full w-full overflow-auto flex justify-center px-4 py-6"
+      data-layout-metrics={JSON.stringify(layoutMetrics)}
+    >
+      <EditorContent 
+        editor={editor} 
+        className="h-full"
+        style={{
+          width: '100%',
+          maxWidth: `${layoutMetrics.contentWidth}px`,
+        }}
+      />
     </div>
   );
 }

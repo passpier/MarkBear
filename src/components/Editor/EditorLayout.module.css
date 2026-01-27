@@ -1,0 +1,191 @@
+/* Editor layout and responsive styling */
+
+.editorContainer {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 1.5rem 1rem; /* py-6 px-4 */
+}
+
+.editorContent {
+  width: 100%;
+  height: 100%;
+}
+
+/* Prose element styling with responsive width */
+.proseMark {
+  width: 100%;
+  max-width: 1024px; /* max-w-4xl */
+  margin: 0 auto;
+}
+
+/* Handle wide content like code blocks and tables */
+.proseMark pre,
+.proseMark table {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on mobile */
+}
+
+.proseMark pre {
+  padding: 1rem;
+  background-color: var(--prism-background, #f6f8fa);
+  border-radius: 0.375rem;
+  border: 1px solid var(--prism-border, #e1e4e8);
+  margin: 1rem 0;
+  white-space: pre;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.proseMark code {
+  font-size: 0.875em;
+  line-height: 1.5;
+  tab-size: 2;
+  -moz-tab-size: 2;
+}
+
+/* Table responsive wrapping */
+.proseMark table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  border: 1px solid var(--table-border, #d0d7de);
+}
+
+.proseMark th,
+.proseMark td {
+  padding: 0.75rem;
+  border: 1px solid var(--table-border, #d0d7de);
+  text-align: left;
+}
+
+.proseMark th {
+  background-color: var(--table-header-bg, #f6f8fa);
+  font-weight: 600;
+}
+
+/* Blockquote styling */
+.proseMark blockquote {
+  border-left: 4px solid var(--quote-border, #d0d7de);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: var(--quote-text, #57606a);
+  font-style: italic;
+}
+
+/* Image responsive sizing */
+.proseMark img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1rem 0;
+  border-radius: 0.375rem;
+}
+
+/* Horizontal rule */
+.proseMark hr {
+  border: none;
+  border-top: 2px solid var(--hr-color, #d0d7de);
+  margin: 2rem 0;
+}
+
+/* List styling */
+.proseMark ul,
+.proseMark ol {
+  margin: 1rem 0;
+  padding-left: 2rem;
+}
+
+.proseMark li {
+  margin: 0.5rem 0;
+}
+
+/* Heading responsive sizing */
+.proseMark h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 1.5rem 0 1rem 0;
+}
+
+.proseMark h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.75rem 0;
+}
+
+.proseMark h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem 0;
+}
+
+.proseMark h4,
+.proseMark h5,
+.proseMark h6 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.75rem 0 0.5rem 0;
+}
+
+/* Responsive text reflow */
+.proseMark p {
+  margin: 1rem 0;
+  line-height: 1.75;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Focus state */
+.editorContent:focus-visible {
+  outline: none;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .proseMark pre {
+    background-color: var(--prism-background-dark, #0d1117);
+    border-color: var(--prism-border-dark, #30363d);
+  }
+
+  .proseMark table {
+    border-color: var(--table-border-dark, #30363d);
+  }
+
+  .proseMark th {
+    background-color: var(--table-header-bg-dark, #161b22);
+  }
+
+  .proseMark blockquote {
+    border-left-color: var(--quote-border-dark, #30363d);
+    color: var(--quote-text-dark, #8b949e);
+  }
+
+  .proseMark hr {
+    border-top-color: var(--hr-color-dark, #30363d);
+  }
+}
+
+/* Scrollbar styling for wide content */
+.proseMark pre::-webkit-scrollbar,
+.proseMark table::-webkit-scrollbar {
+  height: 8px;
+}
+
+.proseMark pre::-webkit-scrollbar-track,
+.proseMark table::-webkit-scrollbar-track {
+  background: var(--scrollbar-track, #f6f8fa);
+}
+
+.proseMark pre::-webkit-scrollbar-thumb,
+.proseMark table::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, #d0d7de);
+  border-radius: 4px;
+}
+
+.proseMark pre::-webkit-scrollbar-thumb:hover,
+.proseMark table::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover, #b0bcc4);
+}
