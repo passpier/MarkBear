@@ -4,6 +4,10 @@ import { Markdown } from 'tiptap-markdown';
 import Placeholder from '@tiptap/extension-placeholder';
 import Typography from '@tiptap/extension-typography';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableHeader from '@tiptap/extension-table-header';
+import TableCell from '@tiptap/extension-table-cell';
 import { common, createLowlight } from 'lowlight';
 import { useEffect, useRef } from 'react';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -50,6 +54,16 @@ export function Editor({ documentId }: EditorProps) {
         placeholder: 'Start writing...',
       }),
       Typography,
+      Table.configure({
+        resizable: true,
+        handleWidth: 4,
+        cellMinWidth: 50,
+        lastColumnResizable: true,
+        allowTableNodeSelection: false,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: document?.content || '',
     editorProps: {

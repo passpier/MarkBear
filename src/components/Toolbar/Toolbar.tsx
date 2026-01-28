@@ -13,8 +13,12 @@ import {
   Quote,
   Minus,
   ChevronDown,
+  Table,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { insertTable, insertRowBelow, deleteRow, insertColumnRight, deleteColumn } from '@/lib/tableCommands';
 
 interface ToolbarProps {
   editor: Editor | null;
@@ -166,6 +170,64 @@ export function Toolbar({ editor }: ToolbarProps) {
             <Minus className="w-4 h-4" />
           </Button>
         </Tooltip>
+
+        <Separator orientation="vertical" className="h-6 mx-1" />
+
+        {/* Table */}
+        <DropdownMenu
+          trigger={
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className={cn(editor.isActive('table') && 'bg-accent')}
+            >
+              <Table className="w-4 h-4" />
+              <ChevronDown className="w-3 h-3 ml-0.5" />
+            </Button>
+          }
+        >
+          <DropdownMenuItem
+            onClick={() => insertTable(editor, { rows: 3, cols: 3 })}
+          >
+            <span>Insert Table</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => insertTable(editor, { rows: 2, cols: 2 })}
+          >
+            <span>2x2 Table</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => insertTable(editor, { rows: 3, cols: 3 })}
+          >
+            <span>3x3 Table</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => insertTable(editor, { rows: 4, cols: 4 })}
+          >
+            <span>4x4 Table</span>
+          </DropdownMenuItem>
+          {editor.isActive('table') && (
+            <>
+              <Separator className="my-1" />
+              <DropdownMenuItem onClick={() => insertRowBelow(editor)}>
+                <Plus className="w-4 h-4 mr-2" />
+                <span>Add Row</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => deleteRow(editor)}>
+                <Trash2 className="w-4 h-4 mr-2" />
+                <span>Delete Row</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => insertColumnRight(editor)}>
+                <Plus className="w-4 h-4 mr-2" />
+                <span>Add Column</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => deleteColumn(editor)}>
+                <Trash2 className="w-4 h-4 mr-2" />
+                <span>Delete Column</span>
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenu>
       </div>
     </div>
   );

@@ -237,8 +237,16 @@
 
 /* Table styles */
 .tiptap table {
-  @apply w-full border-collapse mb-4;
+  @apply w-full border-collapse mb-4 overflow-x-auto;
   border: 1px solid hsl(var(--border-color));
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 0.375rem;
+}
+
+.tiptap table:hover {
+  box-shadow: 0 0 0 2px hsl(var(--bg-selection) / 0.3);
 }
 
 .tiptap table th {
@@ -246,15 +254,59 @@
   color: hsl(var(--table-header-text));
   @apply font-bold p-3 text-left border;
   border-color: hsl(var(--border-color));
+  position: relative;
+  user-select: none;
 }
 
 .tiptap table td {
   @apply p-3 border;
   border-color: hsl(var(--border-color));
+  position: relative;
+}
+
+.tiptap table tbody tr {
+  transition: background-color 0.15s ease;
 }
 
 .tiptap table tbody tr:nth-child(odd) {
   background-color: hsl(var(--table-row-alt) / 0.5);
+}
+
+.tiptap table tbody tr:hover {
+  background-color: hsl(var(--table-row-alt) / 0.8);
+}
+
+/* Table cell focus state */
+.tiptap table td.selectedCell,
+.tiptap table th.selectedCell {
+  background-color: hsl(var(--bg-selection) / 0.3);
+  box-shadow: inset 0 0 0 2px hsl(var(--link-color));
+}
+
+/* Table resize handle */
+.tiptap .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  background-color: hsl(var(--link-color));
+  opacity: 0;
+  width: 4px;
+  user-select: none;
+  transition: opacity 0.15s ease;
+}
+
+.tiptap table th:hover .column-resize-handle,
+.tiptap table td:hover .column-resize-handle {
+  opacity: 1;
+  cursor: col-resize;
+  pointer-events: auto;
+}
+
+.tiptap .column-resize-handle.dragging {
+  opacity: 1;
+  background-color: hsl(var(--link-color));
 }
 
 /* Selection styles */

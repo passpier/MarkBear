@@ -5,11 +5,12 @@ A modern, desktop Markdown editor built with [Tauri](https://tauri.app/), [React
 ## Features
 
 - **WYSIWYG Markdown Editing** - Edit Markdown with a visual interface powered by Tiptap v2
+- **Table Support** - Full GFM markdown table support with visual editing and resizable columns
 - **File Management** - Open, save, and manage Markdown files with native file dialogs
-- **Rich Text Formatting** - Support for bold, italic, lists, code blocks, and more
+- **Rich Text Formatting** - Support for bold, italic, lists, code blocks, blockquotes, and more
 - **Auto-save** - Automatically save your work at regular intervals
 - **Recent Files** - Quick access to recently opened documents
-- **Dark Mode Ready** - Built with Tailwind CSS for a modern, responsive UI
+- **Theme** - Supported UI themes: GitHub Light, GitHub Dark, Dracula, Nord Light, Nord Dark, Solarized Light, Solarized Dark
 
 ## Tech Stack
 

@@ -400,14 +400,6 @@ fn main() {
                 &[&text_menu, &heading_menu, &list_menu, &block_menu],
             )?;
             menu.append(&format_menu)?;
-
-            let toggle_sidebar_item = MenuItem::with_id(
-                handle,
-                "view_toggle_sidebar",
-                "Toggle Sidebar",
-                true,
-                None::<&str>,
-            )?;
             
             // Create theme submenu items
             let theme_github_light = MenuItem::with_id(
@@ -481,7 +473,6 @@ fn main() {
                 if let Some(submenu) = item.as_submenu() {
                     if submenu.text()? == "View" {
                         submenu.prepend_items(&[
-                            &toggle_sidebar_item,
                             &theme_menu,
                             &view_separator,
                         ])?;
@@ -495,7 +486,7 @@ fn main() {
                     handle,
                     "View",
                     true,
-                    &[&toggle_sidebar_item, &theme_menu],
+                    &[&theme_menu],
                 )?;
                 menu.append(&view_menu)?;
             }
@@ -513,8 +504,6 @@ fn main() {
                 let _ = app.emit("menu-save-as", ());
             } else if event.id() == "file_close_document" {
                 let _ = app.emit("menu-close-document", ());
-            } else if event.id() == "view_toggle_sidebar" {
-                let _ = app.emit("menu-toggle-sidebar", ());
             } else if event.id() == "view_theme_github_light" {
                 let _ = app.emit("menu-set-theme", "github-light");
             } else if event.id() == "view_theme_github_dark" {
