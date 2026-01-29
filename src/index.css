@@ -24,21 +24,25 @@
     --border-muted: 0 0% 91%;
     --border-blockquote: 0 0% 85%;
     
-    --syntax-keyword: 330 60% 50%;
-    --syntax-string: 200 60% 40%;
-    --syntax-number: 217 91% 60%;
-    --syntax-comment: 0 0% 40%;
-    --syntax-function: 260 89% 60%;
-    --syntax-variable: 217 91% 60%;
-    --syntax-operator: 0 0% 15%;
-    --syntax-class: 260 89% 60%;
-    --syntax-tag: 217 91% 60%;
+    --syntax-keyword: 330 100% 40%;       /* Red/Pink for keywords */
+    --syntax-string: 160 75% 35%;          /* Green-blue for strings */
+    --syntax-number: 35 100% 50%;          /* Orange for numbers */
+    --syntax-comment: 0 0% 50%;            /* Gray for comments */
+    --syntax-function: 260 70% 55%;        /* Purple for functions */
+    --syntax-variable: 200 70% 40%;        /* Blue for variables */
+    --syntax-operator: 0 0% 20%;           /* Dark for operators */
+    --syntax-class: 260 70% 55%;           /* Purple for classes */
+    --syntax-tag: 200 70% 40%;             /* Blue for tags */
     
     --table-header-bg: 0 0% 97%;
     --table-header-text: 0 0% 15%;
     --table-row-alt: 0 0% 97%;
     --checkbox-checked: 217 91% 60%;
     --checkbox-unchecked: 0 0% 85%;
+    
+    /* Code block features */
+    --line-highlight-bg: 60 100% 80%;
+    --line-number-color: 0 0% 40%;
     
     /* Theme transitions */
     --transition-duration: 200ms;
@@ -169,6 +173,34 @@
 .tiptap pre code {
   @apply bg-transparent p-0 text-sm;
   color: inherit;
+}
+
+/* Ensure syntax tokens inside pre/code are visible */
+.tiptap pre code .token {
+  color: inherit;
+  background-color: transparent;
+}
+
+/* Ensure hljs tokens are visible */
+.tiptap pre code .hljs-keyword,
+.tiptap pre code .hljs-string,
+.tiptap pre code .hljs-number,
+.tiptap pre code .hljs-literal,
+.tiptap pre code .hljs-attr,
+.tiptap pre code .hljs-comment,
+.tiptap pre code .hljs-function {
+  color: inherit;
+  background-color: transparent;
+}
+
+/* Code Block Node View */
+.code-block-node-view {
+  margin: 1rem 0;
+}
+
+.code-block-node-view.selected {
+  outline: 2px solid hsl(var(--link-color));
+  outline-offset: 2px;
 }
 
 .tiptap blockquote {

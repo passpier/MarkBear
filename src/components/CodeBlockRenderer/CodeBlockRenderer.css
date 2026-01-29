@@ -1,0 +1,483 @@
+/* Code Block Container and Wrapper */
+.code-block-container {
+  position: relative;
+  margin: 1rem 0;
+  border: 1px solid hsl(var(--border-color));
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background-color: hsl(var(--bg-code));
+}
+
+.code-block-container.with-filename {
+  border-radius: 0;
+  border-bottom-left-radius: 0.5rem;
+  border-bottom-right-radius: 0.5rem;
+}
+
+.code-filename {
+  background-color: hsl(var(--bg-secondary));
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: hsl(var(--text-muted));
+  border: 1px solid hsl(var(--border-color));
+  border-bottom: none;
+  border-radius: 0.375rem 0.375rem 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+
+.code-block-wrapper {
+  position: relative;
+  padding: 1rem;
+}
+
+/* Language Label */
+.language-label {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background-color: hsl(var(--bg-code));
+  color: hsl(var(--text-muted));
+  border-radius: 0.1875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Copy Button */
+.copy-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  background-color: hsl(var(--bg-secondary));
+  border: 1px solid hsl(var(--border-color));
+  border-radius: 0.25rem;
+  cursor: pointer;
+  opacity: 0.7;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  transition: all 200ms ease-in-out;
+}
+
+.copy-button:hover {
+  opacity: 1;
+  background-color: hsl(var(--bg-primary));
+  border-color: hsl(var(--text-muted));
+}
+
+.copy-button:focus {
+  outline: 2px solid hsl(var(--link-color));
+  outline-offset: 2px;
+}
+
+.copy-button.copied {
+  background-color: #22c55e;
+  color: white;
+  border-color: #22c55e;
+  opacity: 1;
+}
+
+.copy-button:active {
+  transform: scale(0.98);
+}
+
+/* Code Content Wrapper */
+.code-content-wrapper {
+  position: relative;
+  padding-top: 1.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Code Block Styles */
+.code-block {
+  @apply m-0 p-4 overflow-x-auto;
+  background-color: hsl(var(--bg-code));
+  color: hsl(var(--text-primary));
+  border: none;
+  border-radius: 0;
+  margin: 0;
+  padding: 1rem;
+  font-family: 'Fira Code', 'JetBrains Mono', 'Cascadia Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  tab-size: 4;
+  -moz-tab-size: 4;
+  white-space: pre;
+  word-wrap: normal;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.code-block code {
+  @apply p-0 bg-transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* Code Lines (for line numbers) */
+.code-line {
+  display: flex;
+  align-items: flex-start;
+  min-height: 1.5rem;
+}
+
+.code-line.highlighted {
+  background-color: hsl(var(--bg-selection) / 0.3);
+  margin: 0 -1rem;
+  padding: 0 1rem;
+  border-left: 3px solid hsl(var(--link-color));
+}
+
+.line-number {
+  display: inline-block;
+  width: 3em;
+  text-align: right;
+  padding-right: 1em;
+  color: hsl(var(--text-muted));
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  border-right: 1px solid hsl(var(--border-muted));
+  flex-shrink: 0;
+}
+
+.line-content {
+  display: inline;
+  padding-left: 1em;
+  flex: 1;
+  word-break: break-word;
+}
+
+/* Syntax Highlighting Token Styles - Enhanced */
+.token {
+  color: hsl(var(--text-primary));
+}
+
+/* Comments - Gray */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: hsl(var(--syntax-comment));
+  font-style: italic;
+}
+
+/* Punctuation and Operators */
+.token.punctuation {
+  color: hsl(var(--syntax-operator));
+}
+
+/* Numbers, Booleans, Constants */
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: hsl(var(--syntax-number));
+}
+
+/* Strings */
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: hsl(var(--syntax-string));
+}
+
+/* Operators */
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+  color: hsl(var(--syntax-operator));
+}
+
+/* Keywords and At-Rules */
+.token.atrule,
+.token.keyword {
+  color: hsl(var(--syntax-keyword));
+  font-weight: 500;
+}
+
+/* Functions and Class Names */
+.token.function,
+.token.class-name {
+  color: hsl(var(--syntax-function));
+}
+
+/* Variables, Regex, Important */
+.token.regex,
+.token.important,
+.token.variable {
+  color: hsl(var(--syntax-variable));
+}
+
+/* Emphasis */
+.token.important,
+.token.bold {
+  font-weight: bold;
+}
+
+.token.italic {
+  font-style: italic;
+}
+
+/* Namespace and Type annotations */
+.token.namespace {
+  opacity: 0.7;
+  color: hsl(var(--syntax-function));
+}
+
+/* Additional token types for better coverage */
+.token.parameter {
+  color: hsl(var(--syntax-variable));
+}
+
+.token.property-access,
+.token.method {
+  color: hsl(var(--syntax-function));
+}
+
+.token.module,
+.token.import {
+  color: hsl(var(--syntax-keyword));
+}
+
+.token.literal-string {
+  color: hsl(var(--syntax-string));
+}
+
+.token.template-string {
+  color: hsl(var(--syntax-string));
+}
+
+.token.template-punctuation {
+  color: hsl(var(--syntax-operator));
+}
+
+/* ========================================
+   LOWLIGHT/HLJS TOKEN STYLES (Primary)
+   ======================================== */
+
+/* Comments - Gray/Muted */
+.hljs-comment,
+.hljs-quote {
+  color: hsl(var(--syntax-comment));
+  font-style: italic;
+}
+
+/* Keywords - Red/Pink */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link,
+.hljs-deletion {
+  color: hsl(var(--syntax-keyword));
+  font-weight: 500;
+}
+
+/* Strings - Green/Blue */
+.hljs-string,
+.hljs-title,
+.hljs-attr,
+.hljs-addition {
+  color: hsl(var(--syntax-string));
+}
+
+/* Numbers - Orange */
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-literal {
+  color: hsl(var(--syntax-number));
+}
+
+/* Functions/Methods - Purple */
+.hljs-function,
+.hljs-function .hljs-keyword,
+.hljs-name {
+  color: hsl(var(--syntax-function));
+}
+
+/* Built-in Functions */
+.hljs-built_in {
+  color: hsl(var(--syntax-function));
+}
+
+/* Variables - Blue */
+.hljs-variable {
+  color: hsl(var(--syntax-variable));
+}
+
+/* Attributes/Tags */
+.hljs-attr,
+.hljs-tag,
+.hljs-type {
+  color: hsl(var(--syntax-tag));
+}
+
+/* Operators */
+.hljs-operator,
+.hljs-punctuation {
+  color: hsl(var(--syntax-operator));
+}
+
+/* Meta/Doctype */
+.hljs-meta,
+.hljs-meta-string {
+  color: hsl(var(--syntax-comment));
+  font-style: italic;
+}
+
+/* Subst/Template */
+.hljs-subst {
+  color: hsl(var(--text-primary));
+}
+
+/* Default - ensure good visibility */
+.hljs {
+  color: hsl(var(--text-primary));
+}
+
+/* Scrollbar Styling */
+.code-content-wrapper::-webkit-scrollbar {
+  height: 0.5rem;
+}
+
+.code-content-wrapper::-webkit-scrollbar-track {
+  background: hsl(var(--bg-secondary));
+  border-radius: 0.25rem;
+}
+
+.code-content-wrapper::-webkit-scrollbar-thumb {
+  background: hsl(var(--border-color));
+  border-radius: 0.25rem;
+}
+
+.code-content-wrapper::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--text-muted));
+}
+
+/* Firefox Scrollbar */
+.code-content-wrapper {
+  scrollbar-color: hsl(var(--border-color)) hsl(var(--bg-secondary));
+  scrollbar-width: thin;
+}
+
+/* Focus Styles */
+.code-block:focus-within {
+  outline: 2px solid hsl(var(--link-color));
+  outline-offset: 2px;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .code-block-wrapper {
+    padding: 0.75rem;
+  }
+
+  .code-block {
+    padding: 0.75rem;
+    font-size: 0.8125rem;
+  }
+
+  .language-label {
+    font-size: 0.625rem;
+    padding: 0.0625rem 0.375rem;
+  }
+
+  .copy-button {
+    padding: 0.3125rem 0.4375rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .code-block-wrapper {
+    padding: 0.75rem;
+    margin: 0 -0.75rem;
+    border-radius: 0;
+  }
+
+  .code-block {
+    padding: 0.75rem;
+    font-size: 0.8125rem;
+    margin: 0 -0.75rem;
+    border-radius: 0;
+  }
+
+  .language-label {
+    font-size: 0.625rem;
+    top: 0.25rem;
+    left: 0.25rem;
+  }
+
+  .copy-button {
+    top: 0.25rem;
+    right: 0.25rem;
+    padding: 0.3rem 0.375rem;
+    font-size: 0.6875rem;
+  }
+
+  .copy-button span {
+    display: none;
+  }
+
+  .line-number {
+    display: none;
+  }
+
+  .line-content {
+    padding-left: 0;
+    border-left: none;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .copy-button.copied {
+    background-color: #16a34a;
+    border-color: #16a34a;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .copy-button,
+  .copy-button:hover,
+  .code-block {
+    transition: none;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .copy-button,
+  .language-label {
+    display: none;
+  }
+
+  .code-block {
+    border: 1px solid #ccc;
+    page-break-inside: avoid;
+  }
+}

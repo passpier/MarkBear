@@ -8,15 +8,14 @@ import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
-import { common, createLowlight } from 'lowlight';
-import { useEffect, useRef } from 'react';
+import { all, createLowlight } from 'lowlight';
+import { useEffect, useRef, useMemo } from 'react';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { useEditorLayout } from '@/hooks/useEditorLayout';
 import { debounce } from '@/lib/utils';
-
-const lowlight = createLowlight(common);
+import '@/components/CodeBlockRenderer/CodeBlockRenderer.css';
 
 interface EditorProps {
   documentId: string;
@@ -27,11 +26,16 @@ export function Editor({ documentId }: EditorProps) {
   const updateContent = useDocumentStore((state) => state.updateContent);
   const fontSize = useUIStore((state) => state.fontSize);
   const fontFamily = useUIStore((state) => state.fontFamily);
+  const currentTheme = useUIStore((state) => state.currentTheme);
   const setEditor = useEditorStore((state) => state.setEditor);
   const containerRef = useRef<HTMLDivElement>(null);
   const layoutMetrics = useEditorLayout(containerRef);
 
   const document = documents.find(d => d.id === documentId);
+
+  // Create lowlight instance with comprehensive language support
+  // Using 'all' includes 180+ languages for syntax highlighting
+  const lowlight = useMemo(() => createLowlight(all), []);
 
   const editor = useEditor({
     extensions: [
@@ -43,7 +47,8 @@ export function Editor({ documentId }: EditorProps) {
       }),
       CodeBlockLowlight.configure({
         lowlight,
-        defaultLanguage: 'plaintext',
+        defaultLanguage: null, // Null lets Tiptap detect language from markdown info string
+        languageClassPrefix: 'language-', // Matches hljs class format: language-javascript, language-python, etc.
       }),
       Markdown.configure({
         html: false,
@@ -86,7 +91,13 @@ export function Editor({ documentId }: EditorProps) {
   // Update editor content when document changes
   useEffect(() => {
     if (editor && document && editor.storage.markdown.getMarkdown() !== document.content) {
+      console.log('📄 Loading document content:', document.content.substring(0, 100) + '...');
+      
+      // Clear any old enhancement wrappers before setting content
+      editor.commands.clearContent();
       editor.commands.setContent(document.content);
+      
+      console.log('✅ Document content loaded');
     }
   }, [document?.content, editor, documentId]);
 
@@ -102,6 +113,10 @@ export function Editor({ documentId }: EditorProps) {
       editorElement.style.width = '100%';
     }
   }, [fontSize, fontFamily, editor, layoutMetrics.contentWidth]);
+
+  // REMOVED: Manual DOM manipulation was causing infinite loops
+  // Syntax highlighting is already applied by lowlight
+  // Use CSS pseudo-elements for language labels instead
 
   if (!document) {
     return (
