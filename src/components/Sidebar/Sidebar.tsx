@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,7 +15,7 @@ interface FileEntry {
   is_directory: boolean;
 }
 
-export function Sidebar() {
+export const Sidebar = memo(function Sidebar() {
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -191,4 +191,4 @@ export function Sidebar() {
       </ScrollArea>
     </div>
   );
-}
+});

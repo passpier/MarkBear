@@ -32,7 +32,8 @@ export function useEditorLayout(containerRef: React.RefObject<HTMLDivElement>) {
   });
 
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const measureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const frameRef = useRef<number | null>(null);
+  const lastMetricsRef = useRef<LayoutMetrics | null>(null);
 
   useEffect(() => {
     const calculateMetrics = () => {
@@ -68,7 +69,7 @@ export function useEditorLayout(containerRef: React.RefObject<HTMLDivElement>) {
       const avgCharWidth = 9;
       const optimalLineLength = Math.round(contentWidth / avgCharWidth);
 
-      setMetrics({
+      const nextMetrics: LayoutMetrics = {
         viewportWidth,
         viewportHeight,
         availableWidth,
@@ -79,37 +80,59 @@ export function useEditorLayout(containerRef: React.RefObject<HTMLDivElement>) {
         hasVerticalScrollbar,
         hasHorizontalScrollbar,
         optimalLineLength,
-      });
+      };
+
+      const prevMetrics = lastMetricsRef.current;
+      const isSame =
+        prevMetrics &&
+        prevMetrics.viewportWidth === nextMetrics.viewportWidth &&
+        prevMetrics.viewportHeight === nextMetrics.viewportHeight &&
+        prevMetrics.availableWidth === nextMetrics.availableWidth &&
+        prevMetrics.availableHeight === nextMetrics.availableHeight &&
+        prevMetrics.contentWidth === nextMetrics.contentWidth &&
+        prevMetrics.horizontalPadding === nextMetrics.horizontalPadding &&
+        prevMetrics.verticalPadding === nextMetrics.verticalPadding &&
+        prevMetrics.hasVerticalScrollbar === nextMetrics.hasVerticalScrollbar &&
+        prevMetrics.hasHorizontalScrollbar === nextMetrics.hasHorizontalScrollbar &&
+        prevMetrics.optimalLineLength === nextMetrics.optimalLineLength;
+
+      if (!isSame) {
+        lastMetricsRef.current = nextMetrics;
+        setMetrics(nextMetrics);
+      }
     };
 
-    // Debounce calculation to avoid excessive recalculations
-    const debouncedCalculate = () => {
-      if (measureTimeoutRef.current) {
-        clearTimeout(measureTimeoutRef.current);
+    // Schedule calculation on next animation frame for smoother updates
+    const scheduleCalculate = () => {
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current);
       }
-      measureTimeoutRef.current = setTimeout(calculateMetrics, 100);
+      frameRef.current = requestAnimationFrame(() => {
+        frameRef.current = null;
+        calculateMetrics();
+      });
     };
 
     // Initial calculation
     calculateMetrics();
 
     // Set up ResizeObserver for container changes
-    resizeObserverRef.current = new ResizeObserver(debouncedCalculate);
+    resizeObserverRef.current = new ResizeObserver(scheduleCalculate);
     if (containerRef.current) {
       resizeObserverRef.current.observe(containerRef.current);
     }
 
     // Listen for window resize events
-    window.addEventListener('resize', debouncedCalculate);
+    window.addEventListener('resize', scheduleCalculate);
 
     return () => {
-      if (measureTimeoutRef.current) {
-        clearTimeout(measureTimeoutRef.current);
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current);
       }
       if (resizeObserverRef.current) {
         resizeObserverRef.current.disconnect();
       }
-      window.removeEventListener('resize', debouncedCalculate);
+      window.removeEventListener('resize', scheduleCalculate);
     };
   }, [containerRef]);
 

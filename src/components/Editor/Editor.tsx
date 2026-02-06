@@ -9,7 +9,7 @@ import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
 import { all, createLowlight } from 'lowlight';
-import { useEffect, useRef, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useEditorStore } from '@/stores/editorStore';
@@ -22,7 +22,7 @@ interface EditorProps {
   documentId: string;
 }
 
-export function Editor({ documentId }: EditorProps) {
+export const Editor = memo(function Editor({ documentId }: EditorProps) {
   const documents = useDocumentStore((state) => state.documents);
   const updateContent = useDocumentStore((state) => state.updateContent);
   const fontSize = useUIStore((state) => state.fontSize);
@@ -146,8 +146,10 @@ export function Editor({ documentId }: EditorProps) {
         style={{
           width: '100%',
           maxWidth: `${layoutMetrics.contentWidth}px`,
+          transition: 'max-width 200ms ease, width 200ms ease',
+          willChange: 'max-width, width',
         }}
       />
     </div>
   );
-}
+});
