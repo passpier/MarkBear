@@ -1,4 +1,4 @@
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -16,6 +16,7 @@ import { useEditorStore } from '@/stores/editorStore';
 import { useEditorLayout } from '@/hooks/useEditorLayout';
 import { debounce } from '@/lib/utils';
 import '@/components/CodeBlockRenderer/CodeBlockRenderer.css';
+import { CodeBlockNodeView } from './CodeBlockNodeView';
 
 interface EditorProps {
   documentId: string;
@@ -36,6 +37,14 @@ export function Editor({ documentId }: EditorProps) {
   // Using 'all' includes 180+ languages for syntax highlighting
   const lowlight = useMemo(() => createLowlight(all), []);
 
+  const MermaidCodeBlock = useMemo(() => {
+    return CodeBlockLowlight.extend({
+      addNodeView() {
+        return ReactNodeViewRenderer(CodeBlockNodeView);
+      },
+    });
+  }, []);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -44,7 +53,7 @@ export function Editor({ documentId }: EditorProps) {
         },
         codeBlock: false, // Disable default code block to use lowlight
       }),
-      CodeBlockLowlight.configure({
+      MermaidCodeBlock.configure({
         lowlight,
         defaultLanguage: null, // Null lets Tiptap detect language from markdown info string
         languageClassPrefix: 'language-', // Matches hljs class format: language-javascript, language-python, etc.

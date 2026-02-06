@@ -125,6 +125,8 @@ export function normalizeLanguage(lang: string): string {
     graphql: 'graphql',
     markdown: 'markdown',
     md: 'markdown',
+    mermaid: 'mermaid',
+    mmd: 'mermaid',
     diff: 'diff',
     patch: 'diff',
     dockerfile: 'dockerfile',

@@ -127,6 +127,47 @@
   line-height: inherit;
 }
 
+/* Mermaid preview styling */
+.tiptap-codeblock-mermaid {
+  margin: 1rem 0;
+}
+
+.mermaid-preview {
+  border: 1px solid hsl(var(--border-color));
+  background-color: hsl(var(--bg-secondary));
+  border-radius: 0.5rem;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.mermaid-svg svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-status {
+  color: hsl(var(--text-muted));
+  font-size: 0.875rem;
+}
+
+.mermaid-error {
+  color: hsl(var(--text-error, 0 84% 60%));
+  background-color: hsl(var(--bg-code));
+  border: 1px solid hsl(var(--border-color));
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.mermaid-source {
+  margin-top: 0.75rem;
+  display: none;
+}
+
+.ProseMirror-selectednode .mermaid-source {
+  display: block;
+}
+
 /* Code Lines (for line numbers) */
 .code-line {
   display: flex;
