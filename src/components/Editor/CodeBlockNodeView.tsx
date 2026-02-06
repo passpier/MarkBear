@@ -1,6 +1,6 @@
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import mermaid from 'mermaid';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { normalizeLanguage } from '@/lib/codeBlockUtils';
 
 let mermaidInitialized = false;
