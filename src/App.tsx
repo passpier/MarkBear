@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { platform } from '@tauri-apps/plugin-os';
@@ -43,6 +44,54 @@ function App() {
   useEffect(() => {
     initializeTheme();
   }, [initializeTheme]);
+
+  // Load any pending files requested by the OS (file association).
+  useEffect(() => {
+    let isActive = true;
+    const loadPending = async () => {
+      try {
+        const pending = await invoke<string[]>('take_pending_open_files');
+        if (!isActive) return;
+        await Promise.all(
+          pending.map(async (path) => {
+            try {
+              await loadDocument(path);
+            } catch (error) {
+              console.warn('Failed to load pending file:', path, error);
+            }
+          })
+        );
+      } catch (error) {
+        console.warn('Failed to fetch pending open files:', error);
+      }
+    };
+
+    void loadPending();
+    return () => {
+      isActive = false;
+    };
+  }, [loadDocument]);
+
+  // Listen for "open-file" events from native side.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    listen<string>('open-file', (event) => {
+      if (event.payload) {
+        void loadDocument(event.payload);
+      }
+    })
+      .then((stop) => {
+        unlisten = stop;
+      })
+      .catch((error) => {
+        console.warn('Failed to listen for open-file events:', error);
+      });
+
+    return () => {
+      unlisten?.();
+    };
+  }, [loadDocument]);
 
   useEffect(() => {
     let isActive = true;

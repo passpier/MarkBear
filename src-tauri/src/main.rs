@@ -7,11 +7,12 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 // State management
 struct AppState {
     recent_files: Mutex<VecDeque<String>>,
+    pending_open_files: Mutex<VecDeque<String>>,
 }
 
 // File entry for directory listing
@@ -146,6 +147,15 @@ fn file_exists(path: String) -> bool {
     PathBuf::from(path).exists()
 }
 
+// Drain any pending open-file requests (used on app startup).
+#[tauri::command]
+fn take_pending_open_files(state: State<AppState>) -> Result<Vec<String>, String> {
+    let mut pending = state.pending_open_files
+        .lock()
+        .map_err(|_| "Failed to lock pending open files".to_string())?;
+    Ok(pending.drain(..).collect())
+}
+
 #[derive(Serialize, Clone)]
 struct MenuCommandPayload {
     command: String,
@@ -160,13 +170,80 @@ fn emit_editor_command(app: &tauri::AppHandle, command: &str, level: Option<u8>)
     let _ = app.emit("menu-editor-command", payload);
 }
 
+fn normalize_open_path(arg: &str) -> Option<String> {
+    let trimmed = arg.trim_matches('"');
+    if trimmed.is_empty() || trimmed.starts_with("-psn_") {
+        return None;
+    }
+
+    let mut path_str = trimmed.to_string();
+    if let Some(stripped) = path_str.strip_prefix("file://") {
+        path_str = stripped.to_string();
+    }
+
+    // Basic decode for spaces in file:// URLs
+    if path_str.contains("%20") {
+        path_str = path_str.replace("%20", " ");
+    }
+
+    let path = PathBuf::from(&path_str);
+    if !path.is_file() {
+        return None;
+    }
+
+    let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("").to_lowercase();
+    if ext != "md" && ext != "markdown" {
+        return None;
+    }
+
+    Some(path.to_string_lossy().to_string())
+}
+
+fn collect_open_paths<I>(args: I) -> Vec<String>
+where
+    I: IntoIterator<Item = String>,
+{
+    args.into_iter()
+        .filter_map(|arg| normalize_open_path(&arg))
+        .collect()
+}
+
+fn queue_open_files(app: &AppHandle, paths: Vec<String>) {
+    if paths.is_empty() {
+        return;
+    }
+
+    if let Ok(mut pending) = app.state::<AppState>().pending_open_files.lock() {
+        for path in &paths {
+            if !pending.contains(path) {
+                pending.push_back(path.clone());
+            }
+        }
+    }
+
+    for path in paths {
+        let _ = app.emit("open-file", path);
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            let paths = collect_open_paths(argv);
+            queue_open_files(app, paths);
+        }))
         .manage(AppState {
             recent_files: Mutex::new(VecDeque::new()),
+            pending_open_files: Mutex::new(VecDeque::new()),
+        })
+        .setup(|app| {
+            let args = std::env::args().skip(1).collect::<Vec<_>>();
+            let paths = collect_open_paths(args);
+            queue_open_files(&app.handle(), paths);
+            Ok(())
         })
         .menu(|handle| {
             let menu = Menu::default(handle)?;
@@ -562,6 +639,7 @@ fn main() {
             delete_file,
             rename_file,
             file_exists,
+            take_pending_open_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

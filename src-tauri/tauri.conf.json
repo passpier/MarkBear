@@ -1,6 +1,6 @@
 {
   "productName": "MarkBear",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "identifier": "com.tauri.wysiwyg.md",
   "build": {
     "beforeDevCommand": "pnpm dev",
