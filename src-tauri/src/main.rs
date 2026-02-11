@@ -156,6 +156,27 @@ fn take_pending_open_files(state: State<AppState>) -> Result<Vec<String>, String
     Ok(pending.drain(..).collect())
 }
 
+// Get OS platform (compile-time detection for early initialization)
+#[tauri::command]
+fn get_os_platform() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        "macos".to_string()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "windows".to_string()
+    }
+    #[cfg(target_os = "linux")]
+    {
+        "gnome".to_string()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        "unknown".to_string()
+    }
+}
+
 #[derive(Serialize, Clone)]
 struct MenuCommandPayload {
     command: String,
@@ -645,11 +666,26 @@ fn main() {
             rename_file,
             file_exists,
             take_pending_open_files,
+            get_os_platform,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| {
+        if let tauri::RunEvent::Ready = event {
+            // Emit platform info as soon as the app is ready
+            let platform = if cfg!(target_os = "macos") {
+                "macos"
+            } else if cfg!(target_os = "windows") {
+                "windows"
+            } else if cfg!(target_os = "linux") {
+                "gnome"
+            } else {
+                "unknown"
+            };
+            let _ = app_handle.emit("init-platform", platform);
+        }
+
         #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Opened { urls } = event {
             let paths: Vec<String> = urls

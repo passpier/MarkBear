@@ -3,7 +3,6 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { platform } from '@tauri-apps/plugin-os';
 import { WindowTitlebar } from 'tauri-controls';
 import { Editor } from '@/components/Editor/Editor';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
@@ -12,6 +11,7 @@ import { useDocumentStore } from '@/stores/documentStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { useAutoSave } from '@/hooks/useAutoSave';
+import { usePlatformInitialization } from '@/hooks/usePlatformInitialization';
 import {
   FileText,
   PanelLeft,
@@ -29,11 +29,14 @@ function App() {
   const initializeTheme = useUIStore((state) => state.initializeTheme);
   const sidebarVisible = useUIStore((state) => state.sidebarVisible);
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
+  const osPlatform = useUIStore((state) => state.osPlatform);
   const hasInitializedDocument = useRef(false);
   const editor = useEditorStore((state) => state.editor);
   const menuUnlistenersRef = useRef<Array<() => void>>([]);
-  const [osPlatform, setOsPlatform] = useState<'macos' | 'windows' | 'gnome' | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Initialize platform detection early (before first render ideally)
+  usePlatformInitialization();
 
   // Initialize auto-save
   useAutoSave();
@@ -95,29 +98,6 @@ function App() {
     };
   }, [loadDocument]);
 
-  useEffect(() => {
-    let isActive = true;
-    const loadPlatform = async () => {
-      try {
-        const detected = await platform();
-        if (!isActive) return;
-        if (detected === 'macos') {
-          setOsPlatform('macos');
-        } else if (detected === 'windows') {
-          setOsPlatform('windows');
-        } else {
-          setOsPlatform('gnome');
-        }
-      } catch (error) {
-        console.warn('Failed to detect platform:', error);
-      }
-    };
-
-    void loadPlatform();
-    return () => {
-      isActive = false;
-    };
-  }, []);
 
   const getDocumentTitle = () => {
     if (!activeDocument) return 'Markdown Editor';

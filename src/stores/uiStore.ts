@@ -9,6 +9,7 @@ interface UIState {
   fontSize: number;
   fontFamily: string;
   sidebarWidth: number;
+  osPlatform: 'macos' | 'windows' | 'gnome' | null;
   // Actions
   setCurrentTheme: (theme: ThemeName) => void;
   toggleTheme: () => void;
@@ -17,6 +18,7 @@ interface UIState {
   setFontSize: (size: number) => void;
   setFontFamily: (family: string) => void;
   setSidebarWidth: (width: number) => void;
+  setOsPlatform: (platform: 'macos' | 'windows' | 'gnome') => void;
   initializeTheme: () => void;
 }
 
@@ -28,6 +30,14 @@ export const useUIStore = create<UIState>()(
       fontSize: 16,
       fontFamily: 'system-ui, -apple-system, sans-serif',
       sidebarWidth: 280,
+      osPlatform: (() => {
+        if (typeof navigator !== 'undefined') {
+          if (navigator.userAgent.includes('Macintosh')) return 'macos';
+          if (navigator.userAgent.includes('Windows')) return 'windows';
+          if (navigator.userAgent.includes('Linux')) return 'gnome';
+        }
+        return null;
+      })(),
 
       setCurrentTheme: (theme: ThemeName) => {
         if (THEME_NAMES[theme]) {
@@ -75,6 +85,9 @@ export const useUIStore = create<UIState>()(
 
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
 
+      setOsPlatform: (platform: 'macos' | 'windows' | 'gnome') =>
+        set({ osPlatform: platform }),
+
       initializeTheme: () => {
         const state = get();
         applyTheme(state.currentTheme);
@@ -82,6 +95,14 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'ui-preferences',
+      partialize: (state) => ({
+        currentTheme: state.currentTheme,
+        sidebarVisible: state.sidebarVisible,
+        fontSize: state.fontSize,
+        fontFamily: state.fontFamily,
+        sidebarWidth: state.sidebarWidth,
+        // osPlatform is excluded from persistence to ensure fresh detection on startup
+      }),
       onRehydrate: (state: unknown) => {
         // Apply theme after hydration from localStorage
         if (state && typeof state === 'object' && 'currentTheme' in state) {

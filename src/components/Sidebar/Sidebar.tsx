@@ -99,7 +99,7 @@ export const Sidebar = memo(function Sidebar() {
   return (
     <div className="h-full flex flex-col bg-muted/30 border-r">
       {/* Header */}
-      <div className="p-3 space-y-2">
+      <div className="px-3 py-7 space-y-2">
         <div className="flex gap-2">
           <Button
             variant="outline"
