@@ -10,6 +10,7 @@ interface UIState {
   fontFamily: string;
   sidebarWidth: number;
   osPlatform: 'macos' | 'windows' | 'gnome' | null;
+  editorMode: 'wysiwyg' | 'source';
   // Actions
   setCurrentTheme: (theme: ThemeName) => void;
   toggleTheme: () => void;
@@ -19,6 +20,8 @@ interface UIState {
   setFontFamily: (family: string) => void;
   setSidebarWidth: (width: number) => void;
   setOsPlatform: (platform: 'macos' | 'windows' | 'gnome') => void;
+  setEditorMode: (mode: 'wysiwyg' | 'source') => void;
+  toggleEditorMode: () => void;
   initializeTheme: () => void;
 }
 
@@ -30,6 +33,7 @@ export const useUIStore = create<UIState>()(
       fontSize: 16,
       fontFamily: 'system-ui, -apple-system, sans-serif',
       sidebarWidth: 280,
+      editorMode: 'wysiwyg',
       osPlatform: (() => {
         if (typeof navigator !== 'undefined') {
           if (navigator.userAgent.includes('Macintosh')) return 'macos';
@@ -88,6 +92,13 @@ export const useUIStore = create<UIState>()(
       setOsPlatform: (platform: 'macos' | 'windows' | 'gnome') =>
         set({ osPlatform: platform }),
 
+      setEditorMode: (mode) => set({ editorMode: mode }),
+
+      toggleEditorMode: () =>
+        set((state) => ({
+          editorMode: state.editorMode === 'wysiwyg' ? 'source' : 'wysiwyg',
+        })),
+
       initializeTheme: () => {
         const state = get();
         applyTheme(state.currentTheme);
@@ -101,6 +112,7 @@ export const useUIStore = create<UIState>()(
         fontSize: state.fontSize,
         fontFamily: state.fontFamily,
         sidebarWidth: state.sidebarWidth,
+        editorMode: state.editorMode,
         // osPlatform is excluded from persistence to ensure fresh detection on startup
       }),
       onRehydrate: (state: unknown) => {

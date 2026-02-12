@@ -6,7 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 // State management
@@ -145,6 +145,19 @@ async fn rename_file(old_path: String, new_path: String) -> Result<(), String> {
 #[tauri::command]
 fn file_exists(path: String) -> bool {
     PathBuf::from(path).exists()
+}
+
+// Update check menu item state
+#[tauri::command]
+fn update_menu_item_state(app: AppHandle, id: String, checked: bool) -> Result<(), String> {
+    if let Some(menu) = app.menu() {
+        if let Some(item) = menu.get(&id) {
+            if let Some(check_item) = item.as_check_menuitem() {
+                let _ = check_item.set_checked(checked);
+            }
+        }
+    }
+    Ok(())
 }
 
 // Drain any pending open-file requests (used on app startup).
@@ -569,6 +582,15 @@ fn main() {
                     &theme_solarized_dark,
                 ],
             )?;
+
+            let source_code_item = CheckMenuItem::with_id(
+                handle,
+                "view_source_code",
+                "Source Code",
+                true,
+                false,
+                Some("CmdOrCtrl+Alt+S"),
+            )?;
             
             let view_separator = PredefinedMenuItem::separator(handle)?;
             let mut view_menu_found = false;
@@ -576,6 +598,8 @@ fn main() {
                 if let Some(submenu) = item.as_submenu() {
                     if submenu.text()? == "View" {
                         submenu.prepend_items(&[
+                            &source_code_item,
+                            &view_separator,
                             &theme_menu,
                             &view_separator,
                         ])?;
@@ -589,7 +613,11 @@ fn main() {
                     handle,
                     "View",
                     true,
-                    &[&theme_menu],
+                    &[
+                        &source_code_item,
+                        &view_separator,
+                        &theme_menu,
+                    ],
                 )?;
                 menu.append(&view_menu)?;
             }
@@ -607,6 +635,8 @@ fn main() {
                 let _ = app.emit("menu-save-as", ());
             } else if event.id() == "file_close_document" {
                 let _ = app.emit("menu-close-document", ());
+            } else if event.id() == "view_source_code" {
+                let _ = app.emit("menu-toggle-editor-mode", ());
             } else if event.id() == "view_theme_github_light" {
                 let _ = app.emit("menu-set-theme", "github-light");
             } else if event.id() == "view_theme_github_dark" {
@@ -665,6 +695,7 @@ fn main() {
             delete_file,
             rename_file,
             file_exists,
+            update_menu_item_state,
             take_pending_open_files,
             get_os_platform,
         ])

@@ -5,6 +5,7 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WindowTitlebar } from 'tauri-controls';
 import { Editor } from '@/components/Editor/Editor';
+import { SourceEditor } from '@/components/Editor/SourceEditor';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { ThemeSelector } from '@/components/ThemeSelector';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -29,6 +30,8 @@ function App() {
   const initializeTheme = useUIStore((state) => state.initializeTheme);
   const sidebarVisible = useUIStore((state) => state.sidebarVisible);
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
+  const editorMode = useUIStore((state) => state.editorMode);
+  const toggleEditorMode = useUIStore((state) => state.toggleEditorMode);
   const osPlatform = useUIStore((state) => state.osPlatform);
   const hasInitializedDocument = useRef(false);
   const editor = useEditorStore((state) => state.editor);
@@ -47,6 +50,14 @@ function App() {
   useEffect(() => {
     initializeTheme();
   }, [initializeTheme]);
+
+  // Sync editor mode to native menu
+  useEffect(() => {
+    void invoke('update_menu_item_state', {
+      id: 'view_source_code',
+      checked: editorMode === 'source',
+    });
+  }, [editorMode]);
 
   // Load any pending files requested by the OS (file association) and listen for new ones.
   useEffect(() => {
@@ -317,6 +328,9 @@ function App() {
           listen('menu-toggle-sidebar', () => {
             toggleSidebar();
           }),
+          listen('menu-toggle-editor-mode', () => {
+            toggleEditorMode();
+          }),
           listen<string>('menu-set-theme', (event) => {
             const themeName = event.payload as any;
             const setCurrentTheme = useUIStore.getState().setCurrentTheme;
@@ -437,7 +451,11 @@ function App() {
           {activeDocumentId ? (
             <>
               <div className="flex-1 overflow-hidden">
-                <Editor documentId={activeDocumentId} />
+                {editorMode === 'wysiwyg' ? (
+                  <Editor documentId={activeDocumentId} />
+                ) : (
+                  <SourceEditor documentId={activeDocumentId} />
+                )}
               </div>
             </>
           ) : (
