@@ -1,4 +1,4 @@
-# Tauri WYSIWYG Markdown Editor
+# MarkBear
 
 A modern, desktop Markdown editor built with [Tauri](https://tauri.app/), [React](https://react.dev/), and [Tiptap](https://tiptap.dev/). Edit Markdown documents with a beautiful WYSIWYG interface and rich text formatting.
 
@@ -66,37 +66,6 @@ Create the desktop application:
 ```bash
 pnpm tauri build
 ```
-
-## Project Structure
-
-```
-├── src/                          # React frontend
-│   ├── components/              # React components
-│   │   ├── Editor/             # Main editor component
-│   │   ├── Toolbar/            # Formatting toolbar
-│   │   ├── Sidebar/            # File browser sidebar
-│   │   └── ui/                 # Reusable UI components
-│   ├── stores/                 # Zustand store configuration
-│   │   ├── documentStore.ts   # Document state management
-│   │   ├── settingsStore.ts   # User settings
-│   │   └── uiStore.ts         # UI state
-│   ├── hooks/                  # Custom React hooks
-│   └── App.tsx                 # Root component
-├── src-tauri/                  # Tauri backend
-│   ├── src/                    # Rust backend code
-│   └── tauri.conf.json        # Tauri configuration
-├── index.html                  # Entry HTML
-├── vite.config.ts             # Vite configuration
-├── tailwind.config.js         # Tailwind configuration
-└── package.json               # Dependencies
-```
-
-## Scripts
-
-- `pnpm dev` - Start Vite development server
-- `pnpm build` - Build frontend with TypeScript checking
-- `pnpm preview` - Preview production build
-- `pnpm tauri` - Run Tauri CLI commands
 
 ## License
 

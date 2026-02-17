@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="headGrad" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#9A5BFF" />
+      <stop offset="65%" stop-color="#6B2BD6" />
+      <stop offset="100%" stop-color="#4C16A8" />
+    </radialGradient>
+    <linearGradient id="muzzleGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F4EEFF" />
+      <stop offset="100%" stop-color="#DCCBFF" />
+    </linearGradient>
+  </defs>
+
+  <g>
+    <circle cx="300" cy="300" r="110" fill="url(#headGrad)" />
+    <circle cx="724" cy="300" r="110" fill="url(#headGrad)" />
+    <circle cx="300" cy="300" r="62" fill="#2B0B5E" />
+    <circle cx="724" cy="300" r="62" fill="#2B0B5E" />
+
+    <path
+      d="M256 402 C256 292 346 224 456 224 H568 C678 224 768 292 768 402 V650 C768 718 714 768 646 768 H378 C310 768 256 718 256 650 Z"
+      fill="url(#headGrad)"
+    />
+
+    <ellipse cx="432" cy="470" rx="50" ry="44" fill="#2A0A5A" />
+    <ellipse cx="592" cy="470" rx="50" ry="44" fill="#2A0A5A" />
+
+    <path d="M364 408 L490 446 L478 478 L352 440 Z" fill="#2A0A5A" />
+    <path d="M660 408 L534 446 L546 478 L672 440 Z" fill="#2A0A5A" />
+
+    <circle cx="458" cy="452" r="10" fill="#130327" />
+    <circle cx="566" cy="452" r="10" fill="#130327" />
+
+    <path
+      d="M420 500 C420 460 452 428 492 428 H532 C572 428 604 460 604 500 V620 C604 654 576 682 542 682 H482 C448 682 420 654 420 620 Z"
+      fill="url(#muzzleGrad)"
+    />
+
+    <ellipse cx="512" cy="548" rx="42" ry="30" fill="#4A1A93" />
+
+    <path d="M512 572 V630" stroke="#40107F" stroke-width="16" stroke-linecap="round" />
+    <path d="M512 630 C496 652 474 658 454 654" stroke="#40107F" stroke-width="16" fill="none" stroke-linecap="round" />
+    <path d="M512 630 C528 652 550 658 570 654" stroke="#40107F" stroke-width="16" fill="none" stroke-linecap="round" />
+  </g>
+</svg>
