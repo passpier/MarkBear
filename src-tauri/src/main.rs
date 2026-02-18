@@ -36,9 +36,9 @@ impl UserSettings {
     /**
      * Get the path to the settings file in the app's config directory
      * Uses platform-specific config directories:
-     * - macOS: ~/Library/Application Support/tauri-wysiwyg-md
-     * - Windows: C:\Users\{User}\AppData\Local\tauri-wysiwyg-md
-     * - Linux: ~/.config/tauri-wysiwyg-md
+     * - macOS: ~/Library/Application Support/MarkBear
+     * - Windows: C:\Users\{User}\AppData\Local\MarkBear
+     * - Linux: ~/.config/MarkBear
      */
     fn config_path() -> Result<PathBuf, String> {
         let config_dir = if cfg!(target_os = "macos") {
@@ -58,7 +58,7 @@ impl UserSettings {
             PathBuf::from(home).join(".config")
         };
         
-        let app_config_dir = config_dir.join("tauri-wysiwyg-md");
+        let app_config_dir = config_dir.join("MarkBear");
         
         // Create directory if it doesn't exist
         fs::create_dir_all(&app_config_dir)
@@ -141,6 +141,12 @@ fn get_label(lang: &str, key: &str) -> String {
             "view_theme" => "佈景主題".to_string(),
             "view_language" => "語言".to_string(),
             "edit" => "編輯".to_string(),
+            "edit_undo" => "復原".to_string(),
+            "edit_redo" => "重做".to_string(),
+            "edit_cut" => "剪下".to_string(),
+            "edit_copy" => "複製".to_string(),
+            "edit_paste" => "貼上".to_string(),
+            "edit_select_all" => "全選".to_string(),
             "window" => "視窗".to_string(),
             "help" => "說明".to_string(),
             "lang_en" => "English".to_string(),
@@ -180,6 +186,12 @@ fn get_label(lang: &str, key: &str) -> String {
             "view_theme" => "Theme".to_string(),
             "view_language" => "Language".to_string(),
             "edit" => "Edit".to_string(),
+            "edit_undo" => "Undo".to_string(),
+            "edit_redo" => "Redo".to_string(),
+            "edit_cut" => "Cut".to_string(),
+            "edit_copy" => "Copy".to_string(),
+            "edit_paste" => "Paste".to_string(),
+            "edit_select_all" => "Select All".to_string(),
             "window" => "Window".to_string(),
             "help" => "Help".to_string(),
             "lang_en" => "English".to_string(),
@@ -583,7 +595,8 @@ fn create_app_menu<R: tauri::Runtime>(handle: &AppHandle<R>, lang: &str) -> taur
     let file_separator = PredefinedMenuItem::separator(handle)?;
 
     let mut file_menu_found = false;
-    for item in menu.items()? {
+    let mut edit_index: Option<usize> = None;
+    for (i, item) in menu.items()?.iter().enumerate() {
         if let Some(submenu) = item.as_submenu() {
             let text = submenu.text()?;
             if text == "File" || text == "檔案" {
@@ -598,13 +611,36 @@ fn create_app_menu<R: tauri::Runtime>(handle: &AppHandle<R>, lang: &str) -> taur
                 ])?;
                 file_menu_found = true;
             } else if text == "Edit" || text == "編輯" {
-                submenu.set_text(get_label(lang, "edit"))?;
+                edit_index = Some(i);
             } else if text == "Window" || text == "視窗" {
                 submenu.set_text(get_label(lang, "window"))?;
             } else if text == "Help" || text == "說明" {
                 submenu.set_text(get_label(lang, "help"))?;
             }
         }
+    }
+
+    // Rebuild Edit submenu with translated PredefinedMenuItem labels.
+    // PredefinedMenuItem variants accept an optional custom label, which lets us
+    // override the macOS system-language default with our app language.
+    if let Some(idx) = edit_index {
+        menu.remove_at(idx)?;
+        let edit_menu = Submenu::with_items(
+            handle,
+            get_label(lang, "edit"),
+            true,
+            &[
+                &PredefinedMenuItem::undo(handle, Some(&get_label(lang, "edit_undo")))?,
+                &PredefinedMenuItem::redo(handle, Some(&get_label(lang, "edit_redo")))?,
+                &PredefinedMenuItem::separator(handle)?,
+                &PredefinedMenuItem::cut(handle, Some(&get_label(lang, "edit_cut")))?,
+                &PredefinedMenuItem::copy(handle, Some(&get_label(lang, "edit_copy")))?,
+                &PredefinedMenuItem::paste(handle, Some(&get_label(lang, "edit_paste")))?,
+                &PredefinedMenuItem::separator(handle)?,
+                &PredefinedMenuItem::select_all(handle, Some(&get_label(lang, "edit_select_all")))?,
+            ],
+        )?;
+        menu.insert(&edit_menu, idx)?;
     }
 
     if !file_menu_found {
