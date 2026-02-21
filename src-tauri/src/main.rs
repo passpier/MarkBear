@@ -72,25 +72,26 @@ impl UserSettings {
     }
 
     /**
-     * Load settings from file, or return defaults if file doesn't exist
+     * Load settings from file.
+     * Returns Ok(Some(settings)) if the file exists and parses successfully,
+     * Ok(None) if the file does not exist (first launch),
+     * or Err if the file exists but cannot be read/parsed.
      */
-    fn load() -> Result<Self, String> {
+    fn load() -> Result<Option<Self>, String> {
         let path = Self::config_path()?;
-        
+
         if path.exists() {
             let content = fs::read_to_string(&path)
                 .map_err(|e| format!("Failed to read settings file: {}", e))?;
-            
+
             let settings: UserSettings = serde_json::from_str(&content)
                 .map_err(|e| format!("Failed to parse settings: {}", e))?;
-            
+
             println!("📂 Settings loaded from: {}", path.display());
-            Ok(settings)
+            Ok(Some(settings))
         } else {
-            println!("📂 Settings file not found, using defaults");
-            Ok(UserSettings {
-                language: "en".to_string(),
-            })
+            println!("📂 Settings file not found (first launch)");
+            Ok(None)
         }
     }
 
@@ -521,7 +522,7 @@ fn set_language(state: State<AppState>, lang: String) -> Result<(), String> {
  */
 #[tauri::command]
 fn get_user_settings() -> Result<UserSettings, String> {
-    let settings = UserSettings::load()?;
+    let settings = UserSettings::load()?.unwrap_or_else(|| UserSettings { language: "en".to_string() });
     println!("📂 User settings retrieved: language={}", settings.language);
     Ok(settings)
 }
@@ -535,7 +536,7 @@ fn save_language_preference(lang: String, state: State<AppState>) -> Result<(), 
     let normalized_lang = normalize_language(&lang);
     
     // Load existing settings (to preserve other settings if any)
-    let mut settings = UserSettings::load()?;
+    let mut settings = UserSettings::load()?.unwrap_or_else(|| UserSettings { language: "en".to_string() });
     
     // Update language
     settings.language = normalized_lang.clone();
@@ -659,7 +660,7 @@ fn emit_editor_command(app: &tauri::AppHandle, command: &str, level: Option<u8>)
  * Used by menu event handlers
  */
 fn save_language_to_storage(lang: &str) -> Result<(), String> {
-    let mut settings = UserSettings::load()?;
+    let mut settings = UserSettings::load()?.unwrap_or_else(|| UserSettings { language: "en".to_string() });
     settings.language = lang.to_string();
     settings.save()
 }
@@ -1139,17 +1140,32 @@ fn main() {
     // 3. Default to English
     
     let default_language = match UserSettings::load() {
-        Ok(settings) => {
+        Ok(Some(settings)) => {
             println!("✅ User language preference loaded from storage: {}", settings.language);
             settings.language
         }
-        Err(e) => {
-            println!("⚠️ Failed to load user settings: {}", e);
-            // Fall back to system locale if file doesn't exist or fails
+        Ok(None) => {
+            // First launch — no saved preference; detect system locale
             match tauri_plugin_os::locale() {
                 Some(locale_str) => {
                     let normalized = normalize_language(&locale_str);
-                    println!("🌍 Falling back to system locale: {} → normalized to: {}", 
+                    println!("🌍 No saved preference; using system locale: {} → normalized to: {}",
+                             locale_str, normalized);
+                    normalized
+                }
+                None => {
+                    println!("⚠️ System locale not available, using default: English");
+                    "en".to_string()
+                }
+            }
+        }
+        Err(e) => {
+            println!("⚠️ Failed to load user settings: {}", e);
+            // Settings file is corrupt or unreadable; fall back to system locale
+            match tauri_plugin_os::locale() {
+                Some(locale_str) => {
+                    let normalized = normalize_language(&locale_str);
+                    println!("🌍 Falling back to system locale: {} → normalized to: {}",
                              locale_str, normalized);
                     normalized
                 }
