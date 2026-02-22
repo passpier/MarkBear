@@ -363,8 +363,16 @@ function App() {
     }
   };
 
-  const handleSaveAs = async () => {
-    if (!activeDocumentId || !activeDocument) return;
+  const handleSaveAs = useCallback(async () => {
+    const { activeDocumentId: docId } = useDocumentStore.getState();
+    if (!docId) return;
+
+    // Flush editor content to store, bypassing the 500 ms debounce
+    const editorInstance = useEditorStore.getState().editor;
+    if (editorInstance) {
+      const currentContent = (editorInstance.storage['markdown'] as { getMarkdown: () => string }).getMarkdown();
+      useDocumentStore.getState().updateContent(docId, currentContent);
+    }
 
     try {
       const filePath = await save({
@@ -376,34 +384,42 @@ function App() {
       });
 
       if (filePath) {
-        // Update document with new path
-        updateContent(activeDocumentId, activeDocument.content);
-        const doc = { ...activeDocument, path: filePath };
+        // Only update path; content is already correct in the store
         useDocumentStore.setState((state) => ({
           documents: state.documents.map(d =>
-            d.id === activeDocumentId ? doc : d
+            d.id === docId ? { ...d, path: filePath } : d
           )
         }));
-        await saveDocument(activeDocumentId);
+        await useDocumentStore.getState().saveDocument(docId);
       }
     } catch (error) {
       console.error('Save as failed:', error);
     }
-  };
+  }, []);
 
-  const handleManualSave = async () => {
-    if (!activeDocumentId || !activeDocument) return;
+  const handleManualSave = useCallback(async () => {
+    const { activeDocumentId: docId, documents } = useDocumentStore.getState();
+    if (!docId) return;
+    const activeDoc = documents.find(d => d.id === docId);
+    if (!activeDoc) return;
 
-    if (activeDocument.path) {
+    // Flush editor content to store, bypassing the 500 ms debounce
+    const editorInstance = useEditorStore.getState().editor;
+    if (editorInstance) {
+      const currentContent = (editorInstance.storage['markdown'] as { getMarkdown: () => string }).getMarkdown();
+      useDocumentStore.getState().updateContent(docId, currentContent);
+    }
+
+    if (activeDoc.path) {
       try {
-        await saveDocument(activeDocumentId);
+        await useDocumentStore.getState().saveDocument(docId);
       } catch (error) {
         console.error('Save failed:', error);
       }
     } else {
-      handleSaveAs();
+      await handleSaveAs();
     }
-  };
+  }, [handleSaveAs]);
 
   const runEditorCommand = (payload: { command: string; level?: number }) => {
     if (!editor) return;
@@ -532,7 +548,7 @@ function App() {
       menuUnlistenersRef.current.forEach(unlisten => unlisten());
       menuUnlistenersRef.current = [];
     };
-  }, [editor, activeDocumentId, createNewDocument, closeDocument, toggleSidebar, setFindBarVisible, setSidebarVisible, setSidebarTab, handleImport, handleExport]);
+  }, [editor, activeDocumentId, handleSaveAs, handleManualSave, createNewDocument, closeDocument, toggleSidebar, setFindBarVisible, setSidebarVisible, setSidebarTab, handleImport, handleExport]);
 
   // Enable/disable export menu items based on whether a document is active
   useEffect(() => {
