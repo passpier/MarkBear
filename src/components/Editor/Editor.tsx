@@ -2,7 +2,10 @@ import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown';
 import Typography from '@tiptap/extension-typography';
+import Image from '@tiptap/extension-image';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import type { MarkdownSerializerState } from '@tiptap/pm/markdown';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
@@ -51,6 +54,45 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
     });
   }, []);
 
+  const CustomImage = useMemo(() =>
+    Image.extend({
+      inline: true,
+      group: 'inline',
+
+      addAttributes() {
+        return {
+          ...this.parent?.(),
+          style: {
+            default: null,
+            parseHTML: (el: Element) => el.getAttribute('style'),
+            renderHTML: (attrs: Record<string, unknown>) =>
+              attrs.style ? { style: attrs.style } : {},
+          },
+        };
+      },
+
+      addStorage() {
+        return {
+          markdown: {
+            serialize(state: MarkdownSerializerState, node: ProseMirrorNode) {
+              if (node.attrs.style) {
+                const src = node.attrs.src as string || '';
+                const alt = node.attrs.alt ? ` alt="${node.attrs.alt as string}"` : '';
+                state.write(`<img src="${src}"${alt} style="${node.attrs.style as string}">`);
+              } else {
+                const alt = state.esc((node.attrs.alt as string) || '');
+                const src = state.esc(node.attrs.src as string);
+                const title = node.attrs.title
+                  ? ` "${(node.attrs.title as string).replace(/"/g, '\\"')}"`
+                  : '';
+                state.write(`![${alt}](${src}${title})`);
+              }
+            },
+          },
+        };
+      },
+    }), []);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -65,11 +107,12 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
         languageClassPrefix: 'language-', // Matches hljs class format: language-javascript, language-python, etc.
       }),
       Markdown.configure({
-        html: false,
+        html: true,
         transformPastedText: true,
         transformCopiedText: true,
       }),
       Typography,
+      CustomImage,
       Table.configure({
         resizable: true,
         handleWidth: 4,
