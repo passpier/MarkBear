@@ -55,6 +55,13 @@
     /* Code block features */
     --line-highlight-bg: 60 100% 80%;
     --line-number-color: 0 0% 40%;
+
+    /* Sidebar (paper cards) */
+    --sidebar-bg: 220 22% 97%;
+    --sidebar-surface: 0 0% 100%;
+    --sidebar-surface-strong: 220 18% 96%;
+    --sidebar-border: 220 14% 86%;
+    --sidebar-highlight-bg: 46 100% 72%;
     
     /* Theme transitions */
     --transition-duration: 200ms;
@@ -66,6 +73,52 @@
     :root {
       --transition-duration: 0ms;
     }
+  }
+}
+
+@layer components {
+  .sidebar-shell {
+    @apply h-full border-r p-3;
+    background-color: hsl(var(--sidebar-bg));
+    border-color: hsl(var(--sidebar-border));
+  }
+
+  .sidebar-card {
+    @apply overflow-hidden rounded-xl border;
+    background-color: hsl(var(--sidebar-surface));
+    border-color: hsl(var(--sidebar-border));
+  }
+
+  .sidebar-card-header {
+    @apply flex items-center justify-between gap-2 border-b px-2.5 py-2;
+    border-color: hsl(var(--sidebar-border));
+    background-color: hsl(var(--sidebar-surface-strong));
+  }
+
+  .sidebar-card-content {
+    @apply p-2;
+  }
+
+  .sidebar-section-title {
+    @apply text-[11px] font-semibold tracking-wide text-foreground/75;
+  }
+
+  .sidebar-row {
+    @apply flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent/60;
+  }
+
+  .sidebar-row-active {
+    background-color: hsl(var(--sidebar-surface-strong));
+    @apply font-medium text-foreground;
+  }
+
+  .sidebar-icon-button {
+    @apply inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground;
+  }
+
+  .sidebar-icon-button-active {
+    background-color: hsl(var(--sidebar-surface-strong));
+    @apply text-foreground;
   }
 }
 

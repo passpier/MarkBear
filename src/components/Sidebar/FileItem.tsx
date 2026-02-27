@@ -18,18 +18,17 @@ export function FileItem({ file, onClick, isActive }: FileItemProps) {
     <button
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm",
-        "hover:bg-accent transition-colors text-left",
-        isActive && "bg-accent font-medium"
+        'sidebar-row w-full text-left',
+        isActive && 'sidebar-row-active'
       )}
       title={file.path}
     >
       {file.is_directory ? (
-        <Folder className="w-4 h-4 flex-shrink-0 text-blue-500" />
+        <Folder className="h-4 w-4 flex-shrink-0 text-sky-600" />
       ) : (
-        <File className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
+        <File className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
       )}
-      <span className="truncate">{file.name}</span>
+      <span className="truncate text-sm">{file.name}</span>
     </button>
   );
 }

@@ -11,7 +11,8 @@ interface UIState {
   sidebarWidth: number;
   osPlatform: 'macos' | 'windows' | 'gnome' | null;
   editorMode: 'wysiwyg' | 'source';
-  sidebarTab: 'files' | 'search';
+  sidebarQuery: string;
+  sidebarSearchFocusNonce: number;
   findBarVisible: boolean;
   // Actions
   setCurrentTheme: (theme: ThemeName) => void;
@@ -25,12 +26,13 @@ interface UIState {
   setEditorMode: (mode: 'wysiwyg' | 'source') => void;
   toggleEditorMode: () => void;
   initializeTheme: () => void;
-  setSidebarTab: (tab: 'files' | 'search') => void;
+  setSidebarQuery: (query: string) => void;
+  requestSidebarSearchFocus: () => void;
   setFindBarVisible: (visible: boolean) => void;
   toggleFindBar: () => void;
 }
 
-type PersistedUIState = Pick<UIState, 'currentTheme' | 'sidebarVisible' | 'fontSize' | 'fontFamily' | 'sidebarWidth' | 'editorMode' | 'sidebarTab'>;
+type PersistedUIState = Pick<UIState, 'currentTheme' | 'sidebarVisible' | 'fontSize' | 'fontFamily' | 'sidebarWidth' | 'editorMode' | 'sidebarQuery'>;
 
 export const useUIStore = create<UIState>()(
   persist(
@@ -41,7 +43,8 @@ export const useUIStore = create<UIState>()(
       fontFamily: 'system-ui, -apple-system, sans-serif',
       sidebarWidth: 280,
       editorMode: 'wysiwyg',
-      sidebarTab: 'files',
+      sidebarQuery: '',
+      sidebarSearchFocusNonce: 0,
       findBarVisible: false,
       osPlatform: (() => {
         if (typeof navigator !== 'undefined') {
@@ -113,7 +116,10 @@ export const useUIStore = create<UIState>()(
         applyTheme(state.currentTheme);
       },
 
-      setSidebarTab: (tab) => set({ sidebarTab: tab }),
+      setSidebarQuery: (query) => set({ sidebarQuery: query }),
+
+      requestSidebarSearchFocus: () =>
+        set((state) => ({ sidebarSearchFocusNonce: state.sidebarSearchFocusNonce + 1 })),
 
       setFindBarVisible: (visible) => set({ findBarVisible: visible }),
 
@@ -129,7 +135,7 @@ export const useUIStore = create<UIState>()(
         fontFamily: state.fontFamily,
         sidebarWidth: state.sidebarWidth,
         editorMode: state.editorMode,
-        sidebarTab: state.sidebarTab,
+        sidebarQuery: state.sidebarQuery,
         // osPlatform and findBarVisible are excluded from persistence
       }),
       onRehydrate: (state: unknown) => {

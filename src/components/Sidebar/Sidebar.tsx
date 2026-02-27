@@ -1,16 +1,22 @@
-import { memo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import {
+  ChevronDown,
+  ChevronRight,
+  FilePlus,
+  FolderOpen,
+  Home,
+  Search,
+} from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useRecentFiles } from '@/hooks/useRecentFiles';
 import { FileItem } from './FileItem';
 import { SearchPanel } from '@/components/Search/SearchPanel';
-import { FolderOpen, FilePlus, Home, Files, Search } from 'lucide-react';
 
 interface FileEntry {
   name: string;
@@ -23,14 +29,33 @@ export const Sidebar = memo(function Sidebar() {
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchFocusTrigger, setSearchFocusTrigger] = useState(0);
+  const [filesCollapsed, setFilesCollapsed] = useState(false);
   const { recentFiles, refresh: refreshRecent } = useRecentFiles();
+
   const loadDocument = useDocumentStore((state) => state.loadDocument);
   const createNewDocument = useDocumentStore((state) => state.createNewDocument);
   const activeDocumentId = useDocumentStore((state) => state.activeDocumentId);
   const documents = useDocumentStore((state) => state.documents);
-  const sidebarTab = useUIStore((state) => state.sidebarTab);
-  const setSidebarTab = useUIStore((state) => state.setSidebarTab);
+
+  const sidebarQuery = useUIStore((state) => state.sidebarQuery);
+  const setSidebarQuery = useUIStore((state) => state.setSidebarQuery);
+  const sidebarSearchFocusNonce = useUIStore((state) => state.sidebarSearchFocusNonce);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const activeDocument = documents.find((d) => d.id === activeDocumentId);
+  const hasSearchQuery = sidebarQuery.trim().length > 0;
+
+  useEffect(() => {
+    if (sidebarSearchFocusNonce > 0) {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }
+  }, [sidebarSearchFocusNonce]);
+
+  const currentWorkspaceName = useMemo(() => {
+    if (!currentDirectory) return t('sidebar.workspace_empty');
+    return currentDirectory.split('/').pop() ?? currentDirectory;
+  }, [currentDirectory, t]);
 
   const loadDirectory = async (path: string) => {
     setLoading(true);
@@ -57,9 +82,9 @@ export const Sidebar = memo(function Sidebar() {
         directory: true,
         multiple: false,
       });
-      
+
       if (selected && typeof selected === 'string') {
-        loadDirectory(selected);
+        await loadDirectory(selected);
       }
     } catch (error) {
       console.error('Failed to open folder:', error);
@@ -68,8 +93,11 @@ export const Sidebar = memo(function Sidebar() {
 
   const handleFileClick = async (file: FileEntry) => {
     if (file.is_directory) {
-      loadDirectory(file.path);
-    } else if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) {
+      await loadDirectory(file.path);
+      return;
+    }
+
+    if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) {
       try {
         await loadDocument(file.path);
         refreshRecent();
@@ -93,158 +121,152 @@ export const Sidebar = memo(function Sidebar() {
   };
 
   const goToParentDirectory = () => {
-    if (currentDirectory) {
-      const parentPath = currentDirectory.split('/').slice(0, -1).join('/');
-      if (parentPath) {
-        loadDirectory(parentPath);
-      }
+    if (!currentDirectory) return;
+    const parentPath = currentDirectory.split('/').slice(0, -1).join('/');
+    if (parentPath) {
+      void loadDirectory(parentPath);
     }
   };
 
-  const activeDocument = documents.find(d => d.id === activeDocumentId);
-
-  const handleSearchTabClick = () => {
-    setSidebarTab('search');
-    setSearchFocusTrigger((n) => n + 1);
-  };
-
   return (
-    <div className="h-full flex flex-col bg-muted/30 border-r">
-      {/* Tab strip */}
-      <div className="flex border-b shrink-0">
-        <button
-          type="button"
-          onClick={() => setSidebarTab('files')}
-          title={t('sidebar.tab_files')}
-          className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium transition-colors border-b-2 ${
-            sidebarTab === 'files'
-              ? 'border-foreground text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Files className="w-3.5 h-3.5" />
-          {t('sidebar.tab_files')}
-        </button>
-        <button
-          type="button"
-          onClick={handleSearchTabClick}
-          title={t('sidebar.tab_search')}
-          className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium transition-colors border-b-2 ${
-            sidebarTab === 'search'
-              ? 'border-foreground text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Search className="w-3.5 h-3.5" />
-          {t('sidebar.tab_search')}
-        </button>
-      </div>
+    <div className="sidebar-shell">
+      <section className="sidebar-card">
+        <div className="sidebar-card-header">
+          <button
+            type="button"
+            onClick={goToParentDirectory}
+            disabled={!currentDirectory}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-foreground/80 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            title={currentDirectory ?? t('sidebar.workspace_empty')}
+          >
+            <span className="max-w-[9.5rem] truncate">{currentWorkspaceName}</span>
+            <ChevronDown className="h-3 w-3" />
+          </button>
+          <span className="text-[10px] text-muted-foreground">⌘⇧F</span>
+        </div>
 
-      {/* Files tab content */}
-      {sidebarTab === 'files' && (
-        <>
-          {/* Header */}
-          <div className="px-3 py-2 space-y-2">
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenFolder}
-                className="flex-1"
-              >
-                <FolderOpen className="w-4 h-4 mr-2" />
-                {t('sidebar.open_folder')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNewFile}
-                title={t('sidebar.new_file')}
-              >
-                <FilePlus className="w-4 h-4" />
-              </Button>
+        <div className="sidebar-card-content space-y-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={sidebarQuery}
+              onChange={(event) => setSidebarQuery(event.target.value)}
+              placeholder={t('search.placeholder')}
+              className="h-8 w-full rounded-md border border-input bg-background pl-7 pr-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenFolder}
+              className="h-8 flex-1 rounded-lg border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-surface))] text-xs hover:bg-[hsl(var(--sidebar-surface-strong))]"
+            >
+              <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+              {t('sidebar.open_folder')}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNewFile}
+              title={t('sidebar.new_file')}
+              className="h-8 rounded-lg border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-surface))] px-2 hover:bg-[hsl(var(--sidebar-surface-strong))]"
+            >
+              <FilePlus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <ScrollArea className="mt-3 flex-1">
+        {recentFiles.length > 0 && (
+          <section className="sidebar-card">
+            <div className="sidebar-card-header">
+              <span className="sidebar-section-title">{t('sidebar.recent_files')}</span>
             </div>
+            <div className="sidebar-card-content space-y-1">
+              {recentFiles.slice(0, 5).map((path) => (
+                <button
+                  key={path}
+                  type="button"
+                  onClick={() => handleRecentFileClick(path)}
+                  className={`sidebar-row w-full text-left ${
+                    activeDocument?.path === path ? 'sidebar-row-active' : ''
+                  }`}
+                  title={path}
+                >
+                  <span className="truncate">{path.split('/').pop()}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
+        <section className="sidebar-card mt-3">
+          <div className="sidebar-card-header">
+            <button
+              type="button"
+              onClick={() => setFilesCollapsed((v) => !v)}
+              className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-semibold text-foreground/80 transition-colors hover:bg-accent"
+            >
+              {filesCollapsed ? (
+                <ChevronRight className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+              {t('sidebar.files')}
+            </button>
             {currentDirectory && (
-              <Button
-                variant="ghost"
-                size="sm"
+              <button
+                type="button"
                 onClick={goToParentDirectory}
-                className="w-full justify-start"
+                className="sidebar-icon-button"
+                title={t('sidebar.parent_directory')}
               >
-                <Home className="w-4 h-4 mr-2" />
-                <span className="truncate text-xs">{currentDirectory}</span>
-              </Button>
+                <Home className="h-3.5 w-3.5" />
+              </button>
             )}
           </div>
 
-          <Separator />
-
-          {/* Recent Files */}
-          {recentFiles.length > 0 && (
-            <>
-              <div className="p-3">
-                <h3 className="text-xs font-semibold text-muted-foreground mb-2">
-                  {t('sidebar.recent_files')}
-                </h3>
-                <div className="space-y-1">
-                  {recentFiles.slice(0, 5).map((path) => (
-                    <button
-                      key={path}
-                      onClick={() => handleRecentFileClick(path)}
-                      className={`
-                        w-full text-left px-2 py-1.5 rounded text-sm truncate
-                        hover:bg-accent transition-colors
-                        ${activeDocument?.path === path ? 'bg-accent' : ''}
-                      `}
-                      title={path}
-                    >
-                      {path.split('/').pop()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <Separator />
-            </>
-          )}
-
-          {/* File List */}
-          <ScrollArea className="flex-1 p-3">
-            {loading ? (
-              <div className="text-sm text-muted-foreground">{t('common.loading')}</div>
-            ) : currentDirectory ? (
-              files.length > 0 ? (
-                <div className="space-y-1">
-                  {files.map((file) => (
-                    <FileItem
-                      key={file.path}
-                      file={file}
-                      onClick={() => handleFileClick(file)}
-                      isActive={activeDocument?.path === file.path}
-                    />
-                  ))}
-                </div>
+          {!filesCollapsed && (
+            <div className="sidebar-card-content">
+              {loading ? (
+                <div className="px-2 py-3 text-xs text-muted-foreground">{t('common.loading')}</div>
+              ) : currentDirectory ? (
+                files.length > 0 ? (
+                  <div className="space-y-1 px-1 pb-1">
+                    {files.map((file) => (
+                      <FileItem
+                        key={file.path}
+                        file={file}
+                        onClick={() => void handleFileClick(file)}
+                        isActive={activeDocument?.path === file.path}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-2 py-3 text-xs text-muted-foreground">
+                    {t('sidebar.no_files_found')}
+                  </div>
+                )
               ) : (
-                <div className="text-sm text-muted-foreground">
-                  {t('sidebar.no_files_found')}
+                <div className="px-2 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                  {t('sidebar.open_folder_to_browse')}
                 </div>
-              )
-            ) : (
-              <div className="text-sm text-muted-foreground text-center mt-8 truncate">
-                {t('sidebar.open_folder_to_browse')}
-              </div>
-            )}
-          </ScrollArea>
-        </>
-      )}
+              )}
+            </div>
+          )}
+        </section>
 
-      {/* Search tab content */}
-      {sidebarTab === 'search' && (
-        <SearchPanel
-          currentDirectory={currentDirectory}
-          focusTrigger={searchFocusTrigger}
-        />
-      )}
+        {hasSearchQuery && (
+          <SearchPanel
+            currentDirectory={currentDirectory}
+            query={sidebarQuery}
+          />
+        )}
+      </ScrollArea>
     </div>
   );
 });

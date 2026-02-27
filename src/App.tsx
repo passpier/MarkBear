@@ -32,11 +32,11 @@ function App() {
   const sidebarVisible = useUIStore((state) => state.sidebarVisible);
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
   const setSidebarVisible = useUIStore((state) => state.setSidebarVisible);
+  const requestSidebarSearchFocus = useUIStore((state) => state.requestSidebarSearchFocus);
   const editorMode = useUIStore((state) => state.editorMode);
   const toggleEditorMode = useUIStore((state) => state.toggleEditorMode);
   const osPlatform = useUIStore((state) => state.osPlatform);
   const setFindBarVisible = useUIStore((state) => state.setFindBarVisible);
-  const setSidebarTab = useUIStore((state) => state.setSidebarTab);
   const language = useSettingsStore((state) => state.language);
   const hasInitializedDocument = useRef(false);
   const editor = useEditorStore((state) => state.editor);
@@ -68,12 +68,12 @@ function App() {
       } else if (e.key === 'F' && e.shiftKey) {
         e.preventDefault();
         setSidebarVisible(true);
-        setSidebarTab('search');
+        requestSidebarSearchFocus();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [osPlatform, setFindBarVisible, setSidebarVisible, setSidebarTab]);
+  }, [osPlatform, setFindBarVisible, setSidebarVisible, requestSidebarSearchFocus]);
 
   const activeDocument = documents.find(d => d.id === activeDocumentId);
 
@@ -525,7 +525,7 @@ function App() {
           }),
           listen('menu-find-in-files', () => {
             setSidebarVisible(true);
-            setSidebarTab('search');
+            requestSidebarSearchFocus();
           }),
           listen<string>('menu-import', (e) => void handleImport(e.payload)),
           listen<string>('menu-export', (e) => void handleExport(e.payload)),
@@ -549,7 +549,7 @@ function App() {
       menuUnlistenersRef.current.forEach(unlisten => unlisten());
       menuUnlistenersRef.current = [];
     };
-  }, [editor, activeDocumentId, handleSaveAs, handleManualSave, createNewDocument, closeDocument, toggleSidebar, setFindBarVisible, setSidebarVisible, setSidebarTab, handleImport, handleExport]);
+  }, [editor, activeDocumentId, handleSaveAs, handleManualSave, createNewDocument, closeDocument, toggleSidebar, setFindBarVisible, setSidebarVisible, requestSidebarSearchFocus, handleImport, handleExport]);
 
   // Enable/disable export menu items based on whether a document is active
   useEffect(() => {

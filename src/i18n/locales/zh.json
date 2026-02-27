@@ -16,7 +16,11 @@
     "no_files_found": "找不到 Markdown 檔案",
     "open_folder_to_browse": "開啟資料夾以瀏覽檔案",
     "tab_files": "檔案",
-    "tab_search": "搜尋"
+    "tab_search": "搜尋",
+    "workspace_empty": "工作區",
+    "files": "檔案",
+    "results": "搜尋結果",
+    "parent_directory": "返回上層資料夾"
   },
   "editor": {
     "placeholder": "在這裡輸入 Markdown..."
@@ -85,7 +89,7 @@
     "use_regex": "使用正規表示式",
     "no_results": "找不到結果",
     "result_summary": "{{files}} 個檔案中共 {{matches}} 個結果",
-    "open_folder_first": "請先在「檔案」分頁開啟資料夾以搜尋檔案"
+    "open_folder_first": "請先開啟資料夾以搜尋檔案"
   },
   "import_export": {
     "importing": "正在匯入",

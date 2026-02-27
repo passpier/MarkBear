@@ -16,7 +16,11 @@
     "no_files_found": "No markdown files found",
     "open_folder_to_browse": "Open a folder to browse files",
     "tab_files": "Files",
-    "tab_search": "Search"
+    "tab_search": "Search",
+    "workspace_empty": "Workspace",
+    "files": "Files",
+    "results": "Results",
+    "parent_directory": "Go to parent directory"
   },
   "editor": {
     "placeholder": "Type your markdown here..."
@@ -85,7 +89,7 @@
     "use_regex": "Use regular expression",
     "no_results": "No results found",
     "result_summary": "{{matches}} results in {{files}} files",
-    "open_folder_first": "Open a folder in the Files tab to search across files"
+    "open_folder_first": "Open a folder to search across files"
   },
   "import_export": {
     "importing": "Importing",
