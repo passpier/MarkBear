@@ -32,7 +32,7 @@ interface UIState {
   toggleFindBar: () => void;
 }
 
-type PersistedUIState = Pick<UIState, 'currentTheme' | 'sidebarVisible' | 'fontSize' | 'fontFamily' | 'sidebarWidth' | 'editorMode' | 'sidebarQuery'>;
+type PersistedUIState = Pick<UIState, 'currentTheme' | 'sidebarVisible' | 'fontSize' | 'fontFamily' | 'sidebarWidth' | 'sidebarQuery'>;
 
 export const useUIStore = create<UIState>()(
   persist(
@@ -128,15 +128,16 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'ui-preferences',
+      version: 2,
+      migrate: (persistedState) => persistedState,
       partialize: (state): PersistedUIState => ({
         currentTheme: state.currentTheme,
         sidebarVisible: state.sidebarVisible,
         fontSize: state.fontSize,
         fontFamily: state.fontFamily,
         sidebarWidth: state.sidebarWidth,
-        editorMode: state.editorMode,
         sidebarQuery: state.sidebarQuery,
-        // osPlatform and findBarVisible are excluded from persistence
+        // osPlatform, editorMode, and findBarVisible are excluded from persistence
       }),
       onRehydrate: (state: unknown) => {
         // Apply theme after hydration from localStorage

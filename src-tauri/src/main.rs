@@ -18,14 +18,16 @@ struct AppState {
     recent_files: Mutex<VecDeque<String>>,
     pending_open_files: Mutex<VecDeque<String>>,
     language: Mutex<String>,
+    source_mode: Mutex<bool>,
 }
 
 impl AppState {
-    fn new(language: String) -> Self {
+    fn new(language: String, source_mode: bool) -> Self {
         AppState {
             recent_files: Mutex::new(VecDeque::new()),
             pending_open_files: Mutex::new(VecDeque::new()),
             language: Mutex::new(language),
+            source_mode: Mutex::new(source_mode),
         }
     }
 }
@@ -34,6 +36,8 @@ impl AppState {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct UserSettings {
     language: String,
+    #[serde(default)]
+    source_mode: bool,
 }
 
 impl UserSettings {
@@ -542,8 +546,8 @@ fn set_language(state: State<AppState>, lang: String) -> Result<(), String> {
  */
 #[tauri::command]
 fn get_user_settings() -> Result<UserSettings, String> {
-    let settings = UserSettings::load()?.unwrap_or_else(|| UserSettings { language: "en".to_string() });
-    println!("📂 User settings retrieved: language={}", settings.language);
+    let settings = UserSettings::load()?.unwrap_or_else(|| UserSettings { language: "en".to_string(), source_mode: false });
+    println!("📂 User settings retrieved: language={}, source_mode={}", settings.language, settings.source_mode);
     Ok(settings)
 }
 
@@ -554,9 +558,9 @@ fn get_user_settings() -> Result<UserSettings, String> {
 #[tauri::command]
 fn save_language_preference(lang: String, state: State<AppState>) -> Result<(), String> {
     let normalized_lang = normalize_language(&lang);
-    
+
     // Load existing settings (to preserve other settings if any)
-    let mut settings = UserSettings::load()?.unwrap_or_else(|| UserSettings { language: "en".to_string() });
+    let mut settings = UserSettings::load()?.unwrap_or_else(|| UserSettings { language: "en".to_string(), source_mode: false });
     
     // Update language
     settings.language = normalized_lang.clone();
@@ -575,7 +579,13 @@ fn save_language_preference(lang: String, state: State<AppState>) -> Result<(), 
 
 // Update check menu item state
 #[tauri::command]
-fn update_menu_item_state(app: AppHandle, id: String, checked: bool) -> Result<(), String> {
+fn update_menu_item_state(app: AppHandle, state: State<AppState>, id: String, checked: bool) -> Result<(), String> {
+    // Track source_mode in AppState for cross-event consistency
+    if id == "view_source_code" {
+        if let Ok(mut sm) = state.source_mode.lock() {
+            *sm = checked;
+        }
+    }
     if let Some(menu) = app.menu() {
         if let Some(item) = menu.get(&id) {
             if let Some(check_item) = item.as_check_menuitem() {
@@ -680,8 +690,14 @@ fn emit_editor_command(app: &tauri::AppHandle, command: &str, level: Option<u8>)
  * Used by menu event handlers
  */
 fn save_language_to_storage(lang: &str) -> Result<(), String> {
-    let mut settings = UserSettings::load()?.unwrap_or_else(|| UserSettings { language: "en".to_string() });
+    let mut settings = UserSettings::load()?.unwrap_or_else(|| UserSettings { language: "en".to_string(), source_mode: false });
     settings.language = lang.to_string();
+    settings.save()
+}
+
+fn save_source_mode_to_storage(mode: bool) -> Result<(), String> {
+    let mut settings = UserSettings::load()?.unwrap_or_else(|| UserSettings { language: "en".to_string(), source_mode: false });
+    settings.source_mode = mode;
     settings.save()
 }
 
@@ -969,14 +985,14 @@ fn main() {
     // 2. Fall back to system locale
     // 3. Default to English
     
-    let default_language = match UserSettings::load() {
+    let (default_language, default_source_mode) = match UserSettings::load() {
         Ok(Some(settings)) => {
-            println!("✅ User language preference loaded from storage: {}", settings.language);
-            settings.language
+            println!("✅ User settings loaded from storage: language={}, source_mode={}", settings.language, settings.source_mode);
+            (settings.language, settings.source_mode)
         }
         Ok(None) => {
             // First launch — no saved preference; detect system locale
-            match tauri_plugin_os::locale() {
+            let lang = match tauri_plugin_os::locale() {
                 Some(locale_str) => {
                     let normalized = normalize_language(&locale_str);
                     println!("🌍 No saved preference; using system locale: {} → normalized to: {}",
@@ -987,12 +1003,13 @@ fn main() {
                     println!("⚠️ System locale not available, using default: English");
                     "en".to_string()
                 }
-            }
+            };
+            (lang, false)
         }
         Err(e) => {
             println!("⚠️ Failed to load user settings: {}", e);
             // Settings file is corrupt or unreadable; fall back to system locale
-            match tauri_plugin_os::locale() {
+            let lang = match tauri_plugin_os::locale() {
                 Some(locale_str) => {
                     let normalized = normalize_language(&locale_str);
                     println!("🌍 Falling back to system locale: {} → normalized to: {}",
@@ -1003,7 +1020,8 @@ fn main() {
                     println!("⚠️ System locale not available, using default: English");
                     "en".to_string()
                 }
-            }
+            };
+            (lang, false)
         }
     };
     
@@ -1015,7 +1033,7 @@ fn main() {
             let paths = collect_open_paths(argv);
             queue_open_files(app, paths);
         }))
-        .manage(AppState::new(default_language.clone()))
+        .manage(AppState::new(default_language.clone(), default_source_mode))
         .setup(|app| {
             let args = std::env::args().skip(1).collect::<Vec<_>>();
             let paths = collect_open_paths(args);
@@ -1039,6 +1057,25 @@ fn main() {
             } else if event.id() == "file_close_document" {
                 let _ = app.emit("menu-close-document", ());
             } else if event.id() == "view_source_code" {
+                // Toggle source_mode state in AppState
+                let new_mode = if let Ok(mut sm) = app.state::<AppState>().source_mode.lock() {
+                    *sm = !*sm;
+                    *sm
+                } else {
+                    false
+                };
+                // Persist the new source_mode value
+                if let Err(e) = save_source_mode_to_storage(new_mode) {
+                    println!("❌ Failed to save source_mode preference: {}", e);
+                }
+                // Explicitly confirm the checkmark state (do not rely solely on macOS auto-toggle)
+                if let Some(menu) = app.menu() {
+                    if let Some(item) = menu.get("view_source_code") {
+                        if let Some(check_item) = item.as_check_menuitem() {
+                            let _ = check_item.set_checked(new_mode);
+                        }
+                    }
+                }
                 let _ = app.emit("menu-toggle-editor-mode", ());
             } else if event.id() == "view_theme_github_light" {
                 let _ = app.emit("menu-set-theme", "github-light");
@@ -1064,6 +1101,16 @@ fn main() {
                 if let Ok(menu) = create_app_menu(&app, "en") {
                     let _ = app.set_menu(menu);
                 }
+                // Re-sync view_source_code checkmark with current source_mode state
+                if let Ok(sm) = app.state::<AppState>().source_mode.lock() {
+                    if let Some(menu) = app.menu() {
+                        if let Some(item) = menu.get("view_source_code") {
+                            if let Some(check_item) = item.as_check_menuitem() {
+                                let _ = check_item.set_checked(*sm);
+                            }
+                        }
+                    }
+                }
                 // Update backend state
                 if let Ok(mut lang) = app.state::<AppState>().language.lock() {
                     *lang = "en".to_string();
@@ -1080,6 +1127,16 @@ fn main() {
                 // Update menu directly
                 if let Ok(menu) = create_app_menu(&app, "zh") {
                     let _ = app.set_menu(menu);
+                }
+                // Re-sync view_source_code checkmark with current source_mode state
+                if let Ok(sm) = app.state::<AppState>().source_mode.lock() {
+                    if let Some(menu) = app.menu() {
+                        if let Some(item) = menu.get("view_source_code") {
+                            if let Some(check_item) = item.as_check_menuitem() {
+                                let _ = check_item.set_checked(*sm);
+                            }
+                        }
+                    }
                 }
                 // Update backend state
                 if let Ok(mut lang) = app.state::<AppState>().language.lock() {
