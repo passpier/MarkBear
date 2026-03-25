@@ -41,7 +41,6 @@ function App() {
   const hasInitializedDocument = useRef(false);
   const editor = useEditorStore((state) => state.editor);
   const menuUnlistenersRef = useRef<Array<() => void>>([]);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [importExportStatus, setImportExportStatus] = useState<{
     type: 'import' | 'export';
     format: string;
@@ -174,54 +173,13 @@ function App() {
   useEffect(() => {
     try {
       const currentWindow = getCurrentWindow();
-      // In fullscreen, macOS shows a hover bar with the native window title.
-      // Use the app name only so the filename does not appear there.
-      const title = isFullscreen ? t('common.markdown_editor') : getDocumentTitle();
+      const title = getDocumentTitle();
       document.title = title;
       void currentWindow.setTitle(title);
     } catch (error) {
       console.warn('Failed to update window title:', error);
     }
-  }, [activeDocument?.path, activeDocument?.isDirty, isFullscreen]);
-
-  useEffect(() => {
-    let isActive = true;
-    let unlistenResize: (() => void) | undefined;
-    const currentWindow = getCurrentWindow();
-
-    const syncFullscreenState = async () => {
-      try {
-        const fullscreen = await currentWindow.isFullscreen();
-        if (isActive) {
-          setIsFullscreen(fullscreen);
-        }
-      } catch (error) {
-        console.warn('Failed to read fullscreen state:', error);
-      }
-    };
-
-    void syncFullscreenState();
-
-    currentWindow
-      .onResized(() => {
-        void syncFullscreenState();
-      })
-      .then((unlisten) => {
-        if (!isActive) {
-          unlisten();
-          return;
-        }
-        unlistenResize = unlisten;
-      })
-      .catch((error) => {
-        console.warn('Failed to listen for resize events:', error);
-      });
-
-    return () => {
-      isActive = false;
-      unlistenResize?.();
-    };
-  }, []);
+  }, [activeDocument?.path, activeDocument?.isDirty]);
 
   const documentTitle = (() => {
     if (!activeDocument) return t('common.markdown_editor');
@@ -566,8 +524,7 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col">
-      {!isFullscreen && (
-        <WindowTitlebar
+      <WindowTitlebar
           className={`${titlebarClassName}`}
           controlsOrder="system"
           windowControlsProps={{
@@ -615,7 +572,6 @@ function App() {
             )}
           </div>
         </WindowTitlebar>
-      )}
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
