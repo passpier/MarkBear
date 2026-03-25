@@ -91,6 +91,15 @@
     "result_summary": "{{matches}} results in {{files}} files",
     "open_folder_first": "Open a folder to search across files"
   },
+  "table": {
+    "add_row_above": "Add Row Above",
+    "add_row_below": "Add Row Below",
+    "delete_row": "Delete Row",
+    "add_column_left": "Add Column Left",
+    "add_column_right": "Add Column Right",
+    "delete_column": "Delete Column",
+    "delete_table": "Delete Table"
+  },
   "import_export": {
     "importing": "Importing",
     "exporting": "Exporting",

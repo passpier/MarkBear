@@ -249,6 +249,10 @@
 }
 
 /* Code Block Node View */
+.tiptap-codeblock {
+  position: relative;
+}
+
 .code-block-node-view {
   margin: 1rem 0;
 }

@@ -91,6 +91,15 @@
     "result_summary": "{{files}} 個檔案中共 {{matches}} 個結果",
     "open_folder_first": "請先開啟資料夾以搜尋檔案"
   },
+  "table": {
+    "add_row_above": "在上方新增列",
+    "add_row_below": "在下方新增列",
+    "delete_row": "刪除列",
+    "add_column_left": "在左側新增欄",
+    "add_column_right": "在右側新增欄",
+    "delete_column": "刪除欄",
+    "delete_table": "刪除表格"
+  },
   "import_export": {
     "importing": "正在匯入",
     "exporting": "正在匯出",

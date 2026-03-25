@@ -21,6 +21,7 @@ import '@/components/CodeBlockRenderer/CodeBlockRenderer.css';
 import { CodeBlockNodeView } from './CodeBlockNodeView';
 import { SearchExtension, type SearchStorage } from './searchExtension';
 import { FindBar } from './FindBar';
+import { TableHoverPanel } from './TableHoverPanel';
 
 interface EditorProps {
   documentId: string;
@@ -276,6 +277,7 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
           }}
         />
       </div>
+      {editor && <TableHoverPanel editor={editor} containerRef={containerRef} />}
     </div>
   );
 });
