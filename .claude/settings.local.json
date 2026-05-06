@@ -10,7 +10,10 @@
       "Bash(cargo build:*)",
       "Bash(grep -r popup_menu /Users/pingshengcheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tauri-2.9.5/src/ --include=*.rs)",
       "Bash(grep:*)",
-      "Bash(pnpm lint:*)"
+      "Bash(pnpm lint:*)",
+      "Bash(code)",
+      "Bash(find /Users/pingshengcheng/Home_Projects/MarkBear/node_modules/.pnpm/@tiptap+extension-table@2.27.2*/node_modules/@tiptap/extension-table/src -name \"*.ts\")",
+      "Bash(find *)"
     ]
   }
 }
