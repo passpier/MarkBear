@@ -51,7 +51,7 @@ pub fn cell_to_string(cell: &Data) -> String {
             }
         }
         Data::Error(e) => format!("{:?}", e),
-        Data::DateTime(dt) => format!("{}", dt),
+        Data::DateTime(dt) => excel_serial_to_date(dt.as_f64() as i64),
         Data::DateTimeIso(s) => s.clone(),
         Data::DurationIso(s) => s.clone(),
     };
@@ -72,6 +72,9 @@ fn cell_to_string_ctx(cell: &Data, date_col: bool) -> String {
             }
             Data::Int(i) if looks_like_excel_date(*i as f64) => {
                 return excel_serial_to_date(*i);
+            }
+            Data::DateTime(dt) => {
+                return excel_serial_to_date(dt.as_f64() as i64);
             }
             _ => {}
         }
@@ -393,6 +396,16 @@ mod tests {
         assert!(is_date_header("日期"));
         assert!(!is_date_header("Module"));
         assert!(!is_date_header("Status"));
+    }
+
+    #[test]
+    fn test_cell_to_string_datetime_variant() {
+        use calamine::{ExcelDateTime, ExcelDateTimeType};
+        let dt = ExcelDateTime::new(46078.0, ExcelDateTimeType::DateTime, false);
+        // In a date column: DateTime → ISO date
+        assert_eq!(cell_to_string_ctx(&Data::DateTime(dt.clone()), true), "2026-02-25");
+        // Outside a date column: same conversion (Display is serial, but cell_to_string also converts now)
+        assert_eq!(cell_to_string(&Data::DateTime(dt)), "2026-02-25");
     }
 
     #[test]
