@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufWriter;
 
 use docx_rs::{
-    read_docx, DocumentChild, Docx, Paragraph, ParagraphChild, Run, RunChild, Table,
-    TableCell, TableCellContent, TableChild, TableRow, TableRowChild,
+    read_docx, DocumentChild, Docx, HyperlinkData, Paragraph, ParagraphChild, Run, RunChild,
+    StructuredDataTag, StructuredDataTagChild, Table, TableCell, TableCellContent, TableChild,
+    TableRow, TableRowChild,
 };
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
@@ -15,6 +17,7 @@ use super::ConversionError;
 /// - Images are skipped
 /// - Track changes, comments, footnotes are dropped
 /// - Complex layouts (text boxes, columns) may have scrambled order
+/// - TOC is replaced with an HTML comment placeholder
 pub fn docx_to_markdown(path: &str) -> Result<String, ConversionError> {
     let bytes =
         std::fs::read(path).map_err(|e| ConversionError(format!("Failed to read file: {}", e)))?;
@@ -22,13 +25,16 @@ pub fn docx_to_markdown(path: &str) -> Result<String, ConversionError> {
     let docx = read_docx(&bytes)
         .map_err(|e| ConversionError(format!("Failed to parse DOCX: {:?}", e)))?;
 
+    // Build numId -> is_ordered map from the document's numbering definitions.
+    let num_map = build_numbering_map(&docx);
+
     let mut output = String::new();
     let mut first_block = true;
 
     for child in &docx.document.children {
         match child {
             DocumentChild::Paragraph(para) => {
-                let md = paragraph_to_markdown(para);
+                let md = paragraph_to_markdown(para, &num_map);
                 if md.trim().is_empty() {
                     if !first_block {
                         output.push('\n');
@@ -46,8 +52,25 @@ pub fn docx_to_markdown(path: &str) -> Result<String, ConversionError> {
                 if !first_block {
                     output.push('\n');
                 }
-                output.push_str(&table_to_markdown(table));
+                output.push_str(&table_to_markdown(table, &num_map));
                 output.push('\n');
+                first_block = false;
+            }
+            DocumentChild::StructuredDataTag(sdt) => {
+                let md = sdt_to_markdown(sdt, &num_map);
+                if !md.trim().is_empty() {
+                    if !first_block {
+                        output.push('\n');
+                    }
+                    output.push_str(&md);
+                    first_block = false;
+                }
+            }
+            DocumentChild::TableOfContents(_) => {
+                if !first_block {
+                    output.push('\n');
+                }
+                output.push_str("<!-- Table of Contents omitted -->\n");
                 first_block = false;
             }
             _ => {}
@@ -57,7 +80,53 @@ pub fn docx_to_markdown(path: &str) -> Result<String, ConversionError> {
     Ok(output)
 }
 
-fn paragraph_to_markdown(para: &Paragraph) -> String {
+/// Build a lookup from numbering id → is_ordered (true = numbered list, false = bullet).
+/// Resolves via abstract_num_id → level 0 format.
+fn build_numbering_map(docx: &Docx) -> HashMap<usize, bool> {
+    // abstract_num_id → is_ordered
+    let abstract_map: HashMap<usize, bool> = docx
+        .numberings
+        .abstract_nums
+        .iter()
+        .map(|abs| {
+            let ordered = abs
+                .levels
+                .first()
+                .map(|l| is_ordered_format(&l.format.val))
+                .unwrap_or(false);
+            (abs.id, ordered)
+        })
+        .collect();
+
+    docx.numberings
+        .numberings
+        .iter()
+        .map(|n| {
+            let ordered = abstract_map.get(&n.abstract_num_id).copied().unwrap_or(false);
+            (n.id, ordered)
+        })
+        .collect()
+}
+
+fn is_ordered_format(val: &str) -> bool {
+    matches!(
+        val,
+        "decimal"
+            | "decimalZero"
+            | "lowerLetter"
+            | "upperLetter"
+            | "lowerRoman"
+            | "upperRoman"
+            | "ordinal"
+            | "cardinalText"
+            | "ordinalText"
+            | "decimalEnclosedCircle"
+            | "decimalEnclosedFullstop"
+            | "decimalEnclosedParen"
+    )
+}
+
+fn paragraph_to_markdown(para: &Paragraph, num_map: &HashMap<usize, bool>) -> String {
     // Detect heading level from style ID
     let heading_prefix = para
         .property
@@ -76,17 +145,57 @@ fn paragraph_to_markdown(para: &Paragraph) -> String {
         })
         .unwrap_or("");
 
+    // Detect list prefix from numbering property
+    let list_prefix = if heading_prefix.is_empty() {
+        para.property.numbering_property.as_ref().map(|np| {
+            let num_id = np.id.as_ref().map(|i| i.id).unwrap_or(0);
+            let level = np.level.as_ref().map(|l| l.val).unwrap_or(0);
+            let indent = "  ".repeat(level);
+            let marker = if *num_map.get(&num_id).unwrap_or(&false) {
+                "1. "
+            } else {
+                "- "
+            };
+            format!("{}{}", indent, marker)
+        })
+    } else {
+        None
+    };
+
     let mut text = String::new();
     for child in &para.children {
-        if let ParagraphChild::Run(run) = child {
-            text.push_str(&run_to_markdown(run));
+        match child {
+            ParagraphChild::Run(run) => text.push_str(&run_to_markdown(run)),
+            ParagraphChild::Hyperlink(hyperlink) => {
+                let mut inner = String::new();
+                for c in &hyperlink.children {
+                    if let ParagraphChild::Run(r) = c {
+                        inner.push_str(&run_to_markdown(r));
+                    }
+                }
+                if !inner.is_empty() {
+                    match &hyperlink.link {
+                        HyperlinkData::External { path, .. } => {
+                            text.push_str(&format!("[{}]({})", inner, path));
+                        }
+                        HyperlinkData::Anchor { .. } => {
+                            // Internal anchors are dead links in exported markdown — emit plain text.
+                            text.push_str(&inner);
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
     if text.is_empty() {
-        String::new()
-    } else {
-        format!("{}{}", heading_prefix, text)
+        return String::new();
+    }
+
+    match list_prefix {
+        Some(prefix) => format!("{}{}", prefix, text),
+        None => format!("{}{}", heading_prefix, text),
     }
 }
 
@@ -105,7 +214,12 @@ fn run_to_markdown(run: &Run) -> String {
         return String::new();
     }
 
-    // Bold.val is private; presence of Some(_) indicates bold is set
+    // Don't apply bold/italic markers to whitespace-only runs — produces
+    // `** **` artifacts that markdown parsers escape as literal `\*\* \*\*`.
+    if text.trim().is_empty() {
+        return text;
+    }
+
     let bold = run.run_property.bold.is_some();
     let italic = run.run_property.italic.is_some();
 
@@ -117,7 +231,39 @@ fn run_to_markdown(run: &Run) -> String {
     }
 }
 
-fn table_to_markdown(table: &Table) -> String {
+fn sdt_to_markdown(sdt: &StructuredDataTag, num_map: &HashMap<usize, bool>) -> String {
+    let mut output = String::new();
+    for child in &sdt.children {
+        match child {
+            StructuredDataTagChild::Paragraph(para) => {
+                let md = paragraph_to_markdown(para, num_map);
+                if !md.trim().is_empty() {
+                    output.push_str(&md);
+                    output.push('\n');
+                }
+            }
+            StructuredDataTagChild::Table(table) => {
+                output.push_str(&table_to_markdown(table, num_map));
+            }
+            StructuredDataTagChild::Run(run) => {
+                let md = run_to_markdown(run);
+                if !md.is_empty() {
+                    output.push_str(&md);
+                }
+            }
+            StructuredDataTagChild::StructuredDataTag(nested) => {
+                let md = sdt_to_markdown(nested, num_map);
+                if !md.is_empty() {
+                    output.push_str(&md);
+                }
+            }
+            _ => {}
+        }
+    }
+    output
+}
+
+fn table_to_markdown(table: &Table, num_map: &HashMap<usize, bool>) -> String {
     let mut rows: Vec<Vec<String>> = Vec::new();
 
     for row_child in &table.rows {
@@ -128,7 +274,7 @@ fn table_to_markdown(table: &Table) -> String {
             let mut cell_text = String::new();
             for content in &table_cell.children {
                 if let TableCellContent::Paragraph(para) = content {
-                    let p = paragraph_to_markdown(para);
+                    let p = paragraph_to_markdown(para, num_map);
                     if !p.is_empty() {
                         if !cell_text.is_empty() {
                             cell_text.push(' ');
@@ -371,5 +517,12 @@ mod tests {
         let run = Run::new().add_text("hello");
         let result = run_to_markdown(&run);
         assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_run_to_markdown_whitespace_bold_not_wrapped() {
+        let run = Run::new().add_text("   ").bold();
+        let result = run_to_markdown(&run);
+        assert_eq!(result, "   ");
     }
 }
