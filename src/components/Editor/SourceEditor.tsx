@@ -99,18 +99,19 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
   //
   // Consuming `pendingAnchor` is *also* deferred into that same rAF (instead
   // of reading it synchronously here) because React StrictMode mounts this
-  // effect, tears it down, and mounts it again as a purity check. If the
-  // anchor were consumed synchronously in the first (synthetic) pass, it
-  // would be gone by the second (real) pass, and the capture-on-unmount
-  // effect below would (if not itself guarded) overwrite it with a bogus
-  // "top of document" anchor in between — which is exactly what caused the
-  // restored position to land at the top / drift on every toggle.
+  // effect, tears it down, and mounts it again as a purity check. The rAF
+  // scheduled by the first (synthetic) pass still fires even though that
+  // pass's own cleanup has already set `cancelled = true` — so consuming must
+  // be gated on `hasRestoredAnchorRef` (checked *before* consuming, mirroring
+  // `Editor.tsx`'s WYSIWYG restore), not on cancellation alone. Otherwise the
+  // dead first pass's rAF consumes and discards the anchor before the second,
+  // real pass ever gets to see it, and the restore silently never runs.
+  const hasRestoredAnchorRef = useRef(false);
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
     let cancelled = false;
-    let anchor: ReturnType<typeof consumePendingAnchor> | 'unconsumed' = 'unconsumed';
 
     // Mirrors the WYSIWYG editor's settle loop: re-measure every frame until
     // the target scrollTop stops moving (or a hard cap is hit), instead of
@@ -169,10 +170,10 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
     };
 
     requestAnimationFrame(() => {
-      if (anchor === 'unconsumed') {
-        anchor = consumePendingAnchor();
-      }
-      const resolvedAnchor = anchor;
+      if (cancelled || hasRestoredAnchorRef.current) return;
+      hasRestoredAnchorRef.current = true;
+
+      const resolvedAnchor = consumePendingAnchor();
       if (!resolvedAnchor || resolvedAnchor.documentId !== documentIdRef.current) return;
       attemptRestore(0, resolvedAnchor, null);
     });
