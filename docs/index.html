@@ -8,6 +8,8 @@
     <title>Pourdown — Markdown editor that imports Word, Excel, PDF &amp; PowerPoint</title>
     <meta name="description" content="Desktop Markdown editor that converts Word, Excel, PDF, and PowerPoint files into clean, editable Markdown — with live visual (WYSIWYG) editing. Built with Tauri v2, React, and Rust. Free and open source." />
     <link rel="canonical" href="https://passpier.github.io/Pourdown/" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="apple-touch-icon" href="favicon.png" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
@@ -93,7 +95,7 @@
       }
       header .container { display: flex; align-items: center; justify-content: space-between; }
       .logo { display: flex; align-items: center; gap: 10px; font-size: 1.25rem; font-weight: 700; color: var(--text); text-decoration: none; }
-      .logo svg { width: 32px; height: 32px; }
+      .logo img { width: 32px; height: 32px; border-radius: 8px; }
       nav { display: flex; gap: 20px; font-size: 0.9rem; }
 
       .hero {
@@ -232,10 +234,7 @@
     <header>
       <div class="container">
         <a class="logo" href="https://passpier.github.io/Pourdown/">
-          <!-- Droplet emoji as simple inline SVG placeholder -->
-          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <text y="26" font-size="28">💧</text>
-          </svg>
+          <img src="favicon.png" alt="" width="32" height="32" />
           Pourdown
         </a>
         <nav>

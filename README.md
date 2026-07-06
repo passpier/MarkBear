@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./app-icon.png" alt="Pourdown icon" width="128" height="128">
+</p>
+
 # Pourdown
 
 **Turn any document into clean, editable Markdown.**

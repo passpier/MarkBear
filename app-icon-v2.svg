@@ -1,45 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <radialGradient id="headGrad" cx="50%" cy="30%" r="70%">
-      <stop offset="0%" stop-color="#9A5BFF" />
-      <stop offset="65%" stop-color="#6B2BD6" />
-      <stop offset="100%" stop-color="#4C16A8" />
+    <radialGradient id="aGrad" cx="50%" cy="30%" r="78%">
+      <stop offset="0%" stop-color="#3DE7C9"></stop>
+      <stop offset="55%" stop-color="#12B295"></stop>
+      <stop offset="100%" stop-color="#0A6555"></stop>
     </radialGradient>
-    <linearGradient id="muzzleGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#F4EEFF" />
-      <stop offset="100%" stop-color="#DCCBFF" />
+    <linearGradient id="glyphGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"></stop>
+      <stop offset="100%" stop-color="#EEF1F6"></stop>
     </linearGradient>
+    <filter id="glyphShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.18"></feDropShadow>
+    </filter>
   </defs>
-
-  <g>
-    <circle cx="300" cy="300" r="110" fill="url(#headGrad)" />
-    <circle cx="724" cy="300" r="110" fill="url(#headGrad)" />
-    <circle cx="300" cy="300" r="62" fill="#2B0B5E" />
-    <circle cx="724" cy="300" r="62" fill="#2B0B5E" />
-
-    <path
-      d="M256 402 C256 292 346 224 456 224 H568 C678 224 768 292 768 402 V650 C768 718 714 768 646 768 H378 C310 768 256 718 256 650 Z"
-      fill="url(#headGrad)"
-    />
-
-    <ellipse cx="432" cy="470" rx="50" ry="44" fill="#2A0A5A" />
-    <ellipse cx="592" cy="470" rx="50" ry="44" fill="#2A0A5A" />
-
-    <path d="M364 408 L490 446 L478 478 L352 440 Z" fill="#2A0A5A" />
-    <path d="M660 408 L534 446 L546 478 L672 440 Z" fill="#2A0A5A" />
-
-    <circle cx="458" cy="452" r="10" fill="#130327" />
-    <circle cx="566" cy="452" r="10" fill="#130327" />
-
-    <path
-      d="M420 500 C420 460 452 428 492 428 H532 C572 428 604 460 604 500 V620 C604 654 576 682 542 682 H482 C448 682 420 654 420 620 Z"
-      fill="url(#muzzleGrad)"
-    />
-
-    <ellipse cx="512" cy="548" rx="42" ry="30" fill="#4A1A93" />
-
-    <path d="M512 572 V630" stroke="#40107F" stroke-width="16" stroke-linecap="round" />
-    <path d="M512 630 C496 652 474 658 454 654" stroke="#40107F" stroke-width="16" fill="none" stroke-linecap="round" />
-    <path d="M512 630 C528 652 550 658 570 654" stroke="#40107F" stroke-width="16" fill="none" stroke-linecap="round" />
+  <rect x="112" y="112" width="800" height="800" rx="182" fill="url(#aGrad)"></rect>
+  <g filter="url(#glyphShadow)">
+    <rect x="402" y="222" width="70" height="86" rx="13" fill="#FFFFFF" opacity="0.95" transform="rotate(-14 437 265)"></rect>
+    <rect x="486" y="198" width="70" height="86" rx="13" fill="#FFFFFF" opacity="0.82" transform="rotate(6 521 241)"></rect>
+    <rect x="558" y="230" width="70" height="86" rx="13" fill="#FFFFFF" opacity="0.66" transform="rotate(17 593 273)"></rect>
+    <path d="M322 350 H702 L560 548 L560 606 Q560 626 540 626 L484 626 Q464 626 464 606 L464 548 Z" fill="url(#glyphGrad)" stroke-linejoin="round"></path>
+    <rect x="500" y="640" width="24" height="34" rx="12" fill="#FFFFFF"></rect>
+    <rect x="430" y="690" width="164" height="26" rx="13" fill="#FFFFFF"></rect>
+    <rect x="457" y="732" width="110" height="26" rx="13" fill="#FFFFFF" opacity="0.8"></rect>
   </g>
 </svg>
