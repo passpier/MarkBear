@@ -35,7 +35,7 @@ Community benchmarks show Markdown is ~15% more token-efficient than JSON,
 and up to 96% more efficient than raw PDF when fed to LLMs
 
 This approach was inspired by Microsoft's [MarkItDown](https://github.com/microsoft/markitdown);
-see [`docs/markdown-import.md`](docs/markdown-import.md) for how Pourdown's
+see [`markdown-import.md`](markdown-import.md) for how Pourdown's
 Rust implementation works and how it differs.
 
 **How to import:** File → Import → choose your format. The file opens immediately as a new Markdown document.
@@ -157,7 +157,7 @@ For `.exe` installers, SmartScreen may still require a one-time manual "More inf
 The Markdown Import feature was inspired by Microsoft's
 [MarkItDown](https://github.com/microsoft/markitdown) — both projects are
 MIT-licensed. Pourdown is an independent reimplementation in Rust (not a fork
-or port); see [`docs/markdown-import.md`](docs/markdown-import.md) for details
+or port); see [`markdown-import.md`](markdown-import.md) for details
 on how the two differ.
 
 ## License
