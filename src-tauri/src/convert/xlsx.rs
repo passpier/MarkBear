@@ -1,7 +1,5 @@
 use calamine::{open_workbook_auto, Data, Reader};
 use chrono::{Days, NaiveDate};
-use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
-use rust_xlsxwriter::Workbook;
 use std::io::Read;
 
 use super::media::MediaSink;
@@ -301,122 +299,6 @@ fn merge_continuation_rows(rows: Vec<Vec<String>>) -> Vec<Vec<String>> {
     result
 }
 
-/// Extract GFM pipe tables from Markdown text.
-/// Returns a list of (header_row, data_rows) where each row is Vec<String>.
-pub fn extract_tables_from_markdown(markdown: &str) -> Vec<(Vec<String>, Vec<Vec<String>>)> {
-    let mut tables = Vec::new();
-    let options = Options::ENABLE_TABLES;
-    let parser = Parser::new_ext(markdown, options);
-
-    let mut in_table = false;
-    let mut in_table_head = false;
-    let mut header_row: Vec<String> = Vec::new();
-    let mut data_rows: Vec<Vec<String>> = Vec::new();
-    let mut current_row: Vec<String> = Vec::new();
-    let mut current_cell = String::new();
-
-    for event in parser {
-        match event {
-            Event::Start(Tag::Table(_)) => {
-                in_table = true;
-                header_row.clear();
-                data_rows.clear();
-            }
-            Event::End(TagEnd::Table) => {
-                in_table = false;
-                tables.push((header_row.clone(), data_rows.clone()));
-                header_row.clear();
-                data_rows.clear();
-            }
-            Event::Start(Tag::TableHead) => {
-                in_table_head = true;
-                current_row.clear();
-            }
-            Event::End(TagEnd::TableHead) => {
-                // In pulldown-cmark 0.13+, header cells sit directly inside
-                // TableHead with no TableRow wrapper — save them now.
-                in_table_head = false;
-                header_row = current_row.clone();
-                current_row.clear();
-            }
-            Event::Start(Tag::TableRow) => {
-                current_row.clear();
-            }
-            Event::End(TagEnd::TableRow) => {
-                // Only data rows have TableRow wrappers
-                data_rows.push(current_row.clone());
-                current_row.clear();
-            }
-            Event::Start(Tag::TableCell) => {
-                current_cell.clear();
-            }
-            Event::End(TagEnd::TableCell) => {
-                current_row.push(current_cell.clone());
-                current_cell.clear();
-            }
-            Event::Text(text) if in_table => {
-                current_cell.push_str(&text);
-            }
-            _ => {}
-        }
-    }
-
-    let _ = in_table_head;
-    tables
-}
-
-/// Convert Markdown to an XLSX file.
-/// GFM tables in the Markdown become worksheets.
-/// If no tables are found, writes all lines as plain text to Sheet1.
-pub fn markdown_to_xlsx(markdown: &str, path: &str) -> Result<(), ConversionError> {
-    let mut workbook = Workbook::new();
-    let tables = extract_tables_from_markdown(markdown);
-
-    if tables.is_empty() {
-        // Fall back: write plain text lines to Sheet1
-        let sheet = workbook
-            .add_worksheet()
-            .set_name("Sheet1")
-            .map_err(|e| ConversionError(format!("Failed to create sheet: {}", e)))?;
-
-        for (row_idx, line) in markdown.lines().enumerate() {
-            sheet
-                .write_string(row_idx as u32, 0, line)
-                .map_err(|e| ConversionError(format!("Failed to write cell: {}", e)))?;
-        }
-    } else {
-        for (table_idx, (header, data_rows)) in tables.iter().enumerate() {
-            let sheet_name = format!("Table{}", table_idx + 1);
-            let sheet = workbook
-                .add_worksheet()
-                .set_name(&sheet_name)
-                .map_err(|e| ConversionError(format!("Failed to create sheet: {}", e)))?;
-
-            // Write header
-            for (col_idx, cell) in header.iter().enumerate() {
-                sheet
-                    .write_string(0, col_idx as u16, cell)
-                    .map_err(|e| ConversionError(format!("Failed to write header: {}", e)))?;
-            }
-
-            // Write data rows
-            for (row_idx, row) in data_rows.iter().enumerate() {
-                for (col_idx, cell) in row.iter().enumerate() {
-                    sheet
-                        .write_string((row_idx + 1) as u32, col_idx as u16, cell)
-                        .map_err(|e| ConversionError(format!("Failed to write data: {}", e)))?;
-                }
-            }
-        }
-    }
-
-    workbook
-        .save(path)
-        .map_err(|e| ConversionError(format!("Failed to save workbook: {}", e)))?;
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -507,23 +389,5 @@ mod tests {
         ];
         let merged = merge_continuation_rows(rows);
         assert_eq!(merged.len(), 2);
-    }
-
-    #[test]
-    fn test_extract_tables_from_markdown() {
-        let md = "| Col1 | Col2 |\n| --- | --- |\n| A | B |\n| C | D |\n";
-        let tables = extract_tables_from_markdown(md);
-        assert_eq!(tables.len(), 1);
-        let (header, data) = &tables[0];
-        assert_eq!(header, &["Col1", "Col2"]);
-        assert_eq!(data.len(), 2);
-        assert_eq!(data[0], &["A", "B"]);
-    }
-
-    #[test]
-    fn test_extract_tables_no_tables() {
-        let md = "# Heading\n\nJust a paragraph.\n";
-        let tables = extract_tables_from_markdown(md);
-        assert!(tables.is_empty());
     }
 }

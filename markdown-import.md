@@ -49,8 +49,14 @@ exists purely to credit the origin of the idea.
 4. The returned Markdown opens as a new document in the Tiptap editor (or is
    viewable in raw Source mode).
 
-The reverse path (`export_document`) uses the corresponding `markdown_to_*`
-function in the same modules to write Markdown back out to docx/xlsx/pdf/pptx.
+The reverse path (`export_document`) is intentionally narrower than import: it
+writes Markdown out to **HTML** (`convert::html::markdown_to_html`) or **PDF**
+(`convert::pdf::markdown_to_pdf`) only. Office export (docx/xlsx/pptx) was
+removed — Pourdown's core value is importing rich formats into editable
+Markdown, not faithfully round-tripping Office layout/styling back out, which
+Markdown can't represent anyway. HTML and PDF are the two general-purpose,
+layout-controllable targets Markdown naturally maps to (web share/embed and
+standardized read/print, respectively).
 
 ## Per-format conversion approach
 

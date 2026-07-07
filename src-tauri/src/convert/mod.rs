@@ -4,6 +4,7 @@ pub mod docx;
 pub mod xlsx;
 pub mod pdf;
 pub mod pptx;
+pub mod html;
 pub mod media;
 
 #[derive(Debug)]

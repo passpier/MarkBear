@@ -200,10 +200,8 @@ fn get_label(lang: &str, key: &str) -> String {
             "file_import_pdf"  => "從 PDF".to_string(),
             "file_import_pptx" => "從 PowerPoint (.pptx)".to_string(),
             "file_export" => "匯出".to_string(),
-            "file_export_docx" => "匯出為 Word (.docx)...".to_string(),
-            "file_export_xlsx" => "匯出為試算表 (.xlsx)...".to_string(),
+            "file_export_html" => "匯出為 HTML...".to_string(),
             "file_export_pdf"  => "匯出為 PDF...".to_string(),
-            "file_export_pptx" => "匯出為 PowerPoint (.pptx)...".to_string(),
             "app_about" => "關於 Pourdown".to_string(),
             "app_services" => "服務".to_string(),
             "app_hide" => "隱藏 Pourdown".to_string(),
@@ -267,10 +265,8 @@ fn get_label(lang: &str, key: &str) -> String {
             "file_import_pdf"  => "From PDF".to_string(),
             "file_import_pptx" => "From PowerPoint (.pptx)".to_string(),
             "file_export" => "Export".to_string(),
-            "file_export_docx" => "Export as Word (.docx)...".to_string(),
-            "file_export_xlsx" => "Export as Spreadsheet (.xlsx)...".to_string(),
+            "file_export_html" => "Export as HTML...".to_string(),
             "file_export_pdf"  => "Export as PDF...".to_string(),
-            "file_export_pptx" => "Export as PowerPoint (.pptx)...".to_string(),
             "app_about" => "About Pourdown".to_string(),
             "app_services" => "Services".to_string(),
             "app_hide" => "Hide Pourdown".to_string(),
@@ -773,10 +769,8 @@ fn copy_dir_recursive(from: &std::path::Path, to: &std::path::Path) -> std::io::
 #[tauri::command]
 async fn export_document(content: String, path: String, format: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || match format.as_str() {
-        "docx" => convert::docx::markdown_to_docx(&content, &path).map_err(String::from),
-        "xlsx" => convert::xlsx::markdown_to_xlsx(&content, &path).map_err(String::from),
         "pdf"  => convert::pdf::markdown_to_pdf(&content, &path).map_err(String::from),
-        "pptx" => convert::pptx::markdown_to_pptx(&content, &path).map_err(String::from),
+        "html" => convert::html::markdown_to_html(&content, &path).map_err(String::from),
         other  => Err(format!("Unsupported export format: {}", other)),
     })
     .await
@@ -940,15 +934,13 @@ fn create_app_menu<R: tauri::Runtime>(handle: &AppHandle<R>, lang: &str) -> taur
         &[&import_docx_item, &import_xlsx_item, &import_pdf_item, &import_pptx_item],
     )?;
 
-    let export_docx_item = MenuItem::with_id(handle, "file_export_docx", get_label(lang, "file_export_docx"), true, None::<&str>)?;
-    let export_xlsx_item = MenuItem::with_id(handle, "file_export_xlsx", get_label(lang, "file_export_xlsx"), true, None::<&str>)?;
+    let export_html_item = MenuItem::with_id(handle, "file_export_html", get_label(lang, "file_export_html"), true, None::<&str>)?;
     let export_pdf_item  = MenuItem::with_id(handle, "file_export_pdf",  get_label(lang, "file_export_pdf"),  true, None::<&str>)?;
-    let export_pptx_item = MenuItem::with_id(handle, "file_export_pptx", get_label(lang, "file_export_pptx"), true, None::<&str>)?;
     let export_submenu = Submenu::with_items(
         handle,
         get_label(lang, "file_export"),
         true,
-        &[&export_docx_item, &export_xlsx_item, &export_pdf_item, &export_pptx_item],
+        &[&export_html_item, &export_pdf_item],
     )?;
 
     let file_menu = Submenu::with_items(

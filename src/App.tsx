@@ -290,16 +290,12 @@ function App() {
     if (!doc) return;
 
     const extensionMap: Record<string, string> = {
-      docx: 'docx',
-      xlsx: 'xlsx',
       pdf: 'pdf',
-      pptx: 'pptx',
+      html: 'html',
     };
     const filterName: Record<string, string> = {
-      docx: 'Word Document',
-      xlsx: 'Spreadsheet',
       pdf: 'PDF Document',
-      pptx: 'PowerPoint Presentation',
+      html: 'HTML Document',
     };
 
     const baseName = doc.path
@@ -614,7 +610,7 @@ function App() {
 
   // Enable/disable export menu items based on whether a document is active
   useEffect(() => {
-    const ids = ['file_export_docx', 'file_export_xlsx', 'file_export_pdf', 'file_export_pptx'];
+    const ids = ['file_export_html', 'file_export_pdf'];
     ids.forEach((id) => void invoke('enable_menu_item', { id, enabled: !!activeDocument }));
   }, [activeDocument]);
 
