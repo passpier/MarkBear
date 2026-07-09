@@ -1,10 +1,12 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import {
   FilePlus,
   FileText,
+  Folder,
   FolderOpen,
+  List,
   Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,6 +22,31 @@ interface FileEntry {
   name: string;
   path: string;
   is_directory: boolean;
+}
+
+interface SidebarTabProps {
+  active: boolean;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+}
+
+function SidebarTab({ active, icon, label, onClick }: SidebarTabProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-[13px] font-medium transition-colors',
+        active
+          ? 'border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-surface))] font-semibold text-[hsl(var(--link-color))] shadow-md'
+          : 'text-muted-foreground hover:text-foreground'
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
 }
 
 export const Sidebar = memo(function Sidebar() {
@@ -103,31 +130,19 @@ export const Sidebar = memo(function Sidebar() {
     <div className="sidebar-shell flex h-full flex-col min-h-0">
       {/* Segmented tabs — fixed at the top, above either panel, so Files-only
           chrome (search/Open Folder/New File) never bleeds into Outline. */}
-      <div className="flex flex-shrink-0 gap-1 rounded-lg bg-[hsl(var(--sidebar-surface))] p-1">
-        <button
-          type="button"
+      <div className="flex flex-shrink-0 gap-1 rounded-xl bg-[hsl(var(--sidebar-surface-strong))] p-1">
+        <SidebarTab
+          active={sidebarTab === 'files'}
+          icon={<Folder className="h-3.5 w-3.5" />}
+          label={t('sidebar.tab_files')}
           onClick={() => setSidebarTab('files')}
-          className={cn(
-            'flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
-            sidebarTab === 'files'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          {t('sidebar.tab_files')}
-        </button>
-        <button
-          type="button"
+        />
+        <SidebarTab
+          active={sidebarTab === 'outline'}
+          icon={<List className="h-3.5 w-3.5" />}
+          label={t('sidebar.tab_outline')}
           onClick={() => setSidebarTab('outline')}
-          className={cn(
-            'flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
-            sidebarTab === 'outline'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          {t('sidebar.tab_outline')}
-        </button>
+        />
       </div>
 
       {sidebarTab === 'files' ? (
@@ -142,7 +157,7 @@ export const Sidebar = memo(function Sidebar() {
                 value={sidebarQuery}
                 onChange={(event) => setSidebarQuery(event.target.value)}
                 placeholder={t('search.placeholder')}
-                className="h-8 w-full rounded-md border border-input bg-background pl-7 pr-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                className="h-8 w-full rounded-lg border border-input bg-background pl-7 pr-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
             <div className="flex gap-2">

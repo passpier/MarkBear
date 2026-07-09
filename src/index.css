@@ -66,6 +66,11 @@
     /* Theme transitions */
     --transition-duration: 200ms;
     --transition-timing: ease-in-out;
+
+    /* Base corner radius consumed by Tailwind's rounded-sm/md/lg
+       (see borderRadius mapping in tailwind.config.js). Theme-independent,
+       so defined here rather than in theme/utils.ts applyTheme(). */
+    --radius: 0.5rem;
   }
 
   /* Respect prefers-reduced-motion */

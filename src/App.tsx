@@ -616,9 +616,9 @@ function App() {
 
   const titlebarClassName = useMemo(() => {
     if (osPlatform === 'macos') {
-      return 'h-7 flex items-center border-b bg-background/95 px-3';
+      return 'h-[46px] flex items-center border-b bg-background/95 px-3';
     }
-    return 'h-10 flex items-center border-b bg-background/95 px-2';
+    return 'h-[46px] flex items-center border-b bg-background/95 px-2';
   }, [osPlatform]);
 
   return (
