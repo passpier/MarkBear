@@ -410,7 +410,7 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
   }, []);
 
   // Apply font size and responsive layout. Font-family is theme-driven via
-  // the --font-editor CSS var (see index.css .tiptap), not set inline here.
+  // the --font-body CSS var (see index.css .tiptap), not set inline here.
   useEffect(() => {
     if (editor) {
       const editorElement = editor.view.dom;

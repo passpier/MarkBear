@@ -118,9 +118,11 @@ export function applyTheme(themeName: ThemeName): void {
   setCSSVar('--line-highlight-bg', colors.borderMuted);
   setCSSVar('--line-number-color', colors.textMuted);
 
-  // Editor writing-surface font (raw font-family stack, not a color — must
-  // NOT go through hexToHSL). Drives .tiptap and code fonts in index.css.
-  root.style.setProperty('--font-editor', theme.font);
+  // Prose and code font stacks (raw font-family strings, not colors — must
+  // NOT go through hexToHSL). Drive .tiptap (prose) and code fonts in
+  // index.css, CodeBlockRenderer.css, and SourceEditor.tsx respectively.
+  root.style.setProperty('--font-body', theme.fontBody);
+  root.style.setProperty('--font-code', theme.fontCode);
 
   // Toggle Tailwind's `.dark` class and native color-scheme so `dark:`
   // utilities and native form controls/scrollbars follow the selected

@@ -1,8 +1,10 @@
 /*
- * Self-hosted monospace fonts used by Pourdown's themes (src/theme/types.ts
- * `font` field -> --font-editor CSS var, see src/theme/utils.ts applyTheme).
- * Bundled (not loaded from a CDN) because Pourdown is an offline desktop app.
- * All five families are SIL Open Font License 1.1 — see LICENSES.md.
+ * Self-hosted fonts used by Pourdown's themes (src/theme/types.ts `fontBody`
+ * / `fontCode` fields -> --font-body / --font-code CSS vars, see
+ * src/theme/utils.ts applyTheme()). Bundled (not loaded from a CDN) because
+ * Pourdown is an offline desktop app. Monospace families drive code blocks,
+ * inline code, and the source editor; Inter/Lora drive prose (headings +
+ * body). All families are SIL Open Font License 1.1 — see LICENSES.md.
  */
 
 /* JetBrains Mono — variable weight, regular + italic */
@@ -81,6 +83,38 @@
   font-family: 'Hack';
   src: url('./hack-italic.woff2') format('woff2');
   font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Inter — variable weight, regular + italic (prose sans) */
+@font-face {
+  font-family: 'Inter';
+  src: url('./inter.woff2') format('woff2-variations'), url('./inter.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('./inter-italic.woff2') format('woff2-variations'), url('./inter-italic.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Lora — variable weight, regular + italic (prose serif) */
+@font-face {
+  font-family: 'Lora';
+  src: url('./lora.woff2') format('woff2-variations'), url('./lora.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Lora';
+  src: url('./lora-italic.woff2') format('woff2-variations'), url('./lora-italic.woff2') format('woff2');
+  font-weight: 400 700;
   font-style: italic;
   font-display: swap;
 }

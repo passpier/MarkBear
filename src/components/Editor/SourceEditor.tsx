@@ -412,7 +412,7 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
           className="h-full w-full resize-none bg-transparent focus:outline-none leading-relaxed"
           style={{
             fontSize: `${fontSize}px`,
-            fontFamily: 'var(--font-editor)',
+            fontFamily: 'var(--font-code)',
             maxWidth: `${layoutMetrics.contentWidth}px`,
           }}
           onChange={handleChange}

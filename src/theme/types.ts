@@ -2,7 +2,7 @@ export type ThemeName =
   | 'github-light'
   | 'dracula'
   | 'nord'
-  | 'solarized-dark'
+  | 'solarized-light'
   | 'one-dark-pro'
   | 'tokyo-night'
   | 'gruvbox';
@@ -12,11 +12,17 @@ export interface ThemeDefinition {
   displayName: string;
   variant: 'light' | 'dark';
   /**
-   * CSS font-family stack for the editor writing surface (body, headings,
-   * lists, code). First entry is the theme's bundled monospace family (see
+   * CSS font-family stack for prose — headings and body text. First entry is
+   * the theme's bundled sans/serif family (see src/fonts/fonts.css); the
+   * rest is a system fallback.
+   */
+  fontBody: string;
+  /**
+   * CSS font-family stack for code blocks, inline code, and the raw source
+   * editor. First entry is the theme's bundled monospace family (see
    * src/fonts/fonts.css); the rest is a system-mono fallback.
    */
-  font: string;
+  fontCode: string;
   colors: {
     // Background colors
     bgPrimary: string;
@@ -67,7 +73,8 @@ export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
     name: 'github-light',
     displayName: 'GitHub Light',
     variant: 'light',
-    font: "'JetBrains Mono', ui-monospace, monospace",
+    fontBody: "'Inter', system-ui, -apple-system, sans-serif",
+    fontCode: "'JetBrains Mono', ui-monospace, monospace",
     colors: {
       bgPrimary: '#ffffff',
       bgSecondary: '#f6f8fa',
@@ -106,7 +113,8 @@ export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
     name: 'dracula',
     displayName: 'Dracula',
     variant: 'dark',
-    font: "'Fira Code', ui-monospace, monospace",
+    fontBody: "'Inter', system-ui, -apple-system, sans-serif",
+    fontCode: "'Fira Code', ui-monospace, monospace",
     colors: {
       bgPrimary: '#282a36',
       bgSecondary: '#1e1f29',
@@ -145,7 +153,8 @@ export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
     name: 'nord',
     displayName: 'Nord',
     variant: 'dark',
-    font: "'Cascadia Code', ui-monospace, monospace",
+    fontBody: "'Inter', system-ui, -apple-system, sans-serif",
+    fontCode: "'Cascadia Code', ui-monospace, monospace",
     colors: {
       bgPrimary: '#2e3440',
       bgSecondary: '#3b4252',
@@ -179,42 +188,43 @@ export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
     },
   },
 
-  // Solarized Dark — mid/low-contrast, scientifically-derived palette
-  'solarized-dark': {
-    name: 'solarized-dark',
-    displayName: 'Solarized Dark',
-    variant: 'dark',
-    font: "'Source Code Pro', ui-monospace, monospace",
+  // Solarized Light — mid/low-contrast, scientifically-derived palette
+  'solarized-light': {
+    name: 'solarized-light',
+    displayName: 'Solarized Light',
+    variant: 'light',
+    fontBody: "'Lora', Georgia, 'Times New Roman', serif",
+    fontCode: "'Source Code Pro', ui-monospace, monospace",
     colors: {
-      bgPrimary: '#002b36',
-      bgSecondary: '#073642',
-      bgCode: '#002b36',
-      bgBlockquote: '#073642',
-      bgInlineCode: '#073642',
-      bgSelection: '#073642',
-      textPrimary: '#839496',
+      bgPrimary: '#fdf6e3',
+      bgSecondary: '#eee8d5',
+      bgCode: '#eee8d5',
+      bgBlockquote: '#eee8d5',
+      bgInlineCode: '#eee8d5',
+      bgSelection: '#eee8d5',
+      textPrimary: '#657b83',
       textHeading: '#268bd2',
-      textMuted: '#586e75',
+      textMuted: '#93a1a1',
       linkColor: '#268bd2',
       linkHover: '#2aa198',
       linkVisited: '#6c71c4',
-      borderColor: '#073642',
-      borderMuted: '#073642',
+      borderColor: '#eee8d5',
+      borderMuted: '#eee8d5',
       borderBlockquote: '#2aa198',
       syntaxKeyword: '#859900',
       syntaxString: '#2aa198',
       syntaxNumber: '#d33682',
-      syntaxComment: '#586e75',
+      syntaxComment: '#93a1a1',
       syntaxFunction: '#268bd2',
       syntaxVariable: '#268bd2',
       syntaxOperator: '#859900',
       syntaxClass: '#268bd2',
       syntaxTag: '#268bd2',
-      tableHeaderBg: '#073642',
-      tableHeaderText: '#839496',
-      tableRowAlt: '#002b36',
+      tableHeaderBg: '#eee8d5',
+      tableHeaderText: '#657b83',
+      tableRowAlt: '#eee8d5',
       checkboxChecked: '#859900',
-      checkboxUnchecked: '#073642',
+      checkboxUnchecked: '#eee8d5',
     },
   },
 
@@ -223,7 +233,8 @@ export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
     name: 'one-dark-pro',
     displayName: 'One Dark Pro',
     variant: 'dark',
-    font: "'Fira Code', ui-monospace, monospace",
+    fontBody: "'Inter', system-ui, -apple-system, sans-serif",
+    fontCode: "'Fira Code', ui-monospace, monospace",
     colors: {
       bgPrimary: '#282c34',
       bgSecondary: '#21252b',
@@ -262,7 +273,8 @@ export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
     name: 'tokyo-night',
     displayName: 'Tokyo Night',
     variant: 'dark',
-    font: "'JetBrains Mono', ui-monospace, monospace",
+    fontBody: "'Inter', system-ui, -apple-system, sans-serif",
+    fontCode: "'JetBrains Mono', ui-monospace, monospace",
     colors: {
       bgPrimary: '#1a1b26',
       bgSecondary: '#16161e',
@@ -301,7 +313,8 @@ export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
     name: 'gruvbox',
     displayName: 'Gruvbox',
     variant: 'dark',
-    font: "'Hack', ui-monospace, monospace",
+    fontBody: "'Lora', Georgia, 'Times New Roman', serif",
+    fontCode: "'Hack', ui-monospace, monospace",
     colors: {
       bgPrimary: '#282828',
       bgSecondary: '#32302f',

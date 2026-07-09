@@ -128,13 +128,15 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'ui-preferences',
-      version: 4,
+      version: 5,
       // v3 -> v4: the theme set was overhauled (github-dark, nord-light,
-      // solarized-light dropped; nord-dark renamed to nord). Remap anyone
-      // persisted on a removed key to its closest replacement so applyTheme
-      // doesn't silently no-op and strand them on stale CSS defaults. Also
-      // drops the removed `fontFamily` field (now theme-driven), which
-      // `partialize` simply omits going forward.
+      // solarized-light dropped; nord-dark renamed to nord). v4 -> v5:
+      // solarized-dark replaced by solarized-light (rebalancing the
+      // light/dark theme split). Remap anyone persisted on a removed key to
+      // its closest replacement so applyTheme doesn't silently no-op and
+      // strand them on stale CSS defaults. Also drops the removed
+      // `fontFamily` field (now theme-driven), which `partialize` simply
+      // omits going forward.
       migrate: (persistedState) => {
         const state = persistedState as Partial<UIState> | undefined;
         if (!state || typeof state !== 'object') return state;
@@ -143,7 +145,7 @@ export const useUIStore = create<UIState>()(
           'github-dark': 'one-dark-pro',
           'nord-dark': 'nord',
           'nord-light': 'nord',
-          'solarized-light': 'solarized-dark',
+          'solarized-dark': 'solarized-light',
         };
         const currentTheme = state.currentTheme as unknown as string | undefined;
         if (currentTheme && currentTheme in themeMigrations) {
