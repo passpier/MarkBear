@@ -54,12 +54,12 @@
     "light_themes": "淺色主題",
     "dark_themes": "深色主題",
     "github-light": "GitHub 淺色",
-    "github-dark": "GitHub 深色",
     "dracula": "Dracula",
-    "nord-light": "Nord 淺色",
-    "nord-dark": "Nord 深色",
-    "solarized-light": "Solarized 淺色",
-    "solarized-dark": "Solarized 深色"
+    "nord": "Nord",
+    "solarized-dark": "Solarized 深色",
+    "one-dark-pro": "One Dark Pro",
+    "tokyo-night": "Tokyo Night",
+    "gruvbox": "Gruvbox"
   },
   "menu": {
     "file": "檔案",

@@ -1,9 +1,22 @@
-export type ThemeName = 'github-light' | 'github-dark' | 'dracula' | 'nord-light' | 'nord-dark' | 'solarized-light' | 'solarized-dark';
+export type ThemeName =
+  | 'github-light'
+  | 'dracula'
+  | 'nord'
+  | 'solarized-dark'
+  | 'one-dark-pro'
+  | 'tokyo-night'
+  | 'gruvbox';
 
 export interface ThemeDefinition {
   name: string;
   displayName: string;
   variant: 'light' | 'dark';
+  /**
+   * CSS font-family stack for the editor writing surface (body, headings,
+   * lists, code). First entry is the theme's bundled monospace family (see
+   * src/fonts/fonts.css); the rest is a system-mono fallback.
+   */
+  font: string;
   colors: {
     // Background colors
     bgPrimary: string;
@@ -12,22 +25,22 @@ export interface ThemeDefinition {
     bgBlockquote: string;
     bgInlineCode: string;
     bgSelection: string;
-    
+
     // Text colors
     textPrimary: string;
     textHeading: string;
     textMuted: string;
-    
+
     // Link colors
     linkColor: string;
     linkHover: string;
     linkVisited: string;
-    
+
     // Border colors
     borderColor: string;
     borderMuted: string;
     borderBlockquote: string;
-    
+
     // Syntax highlighting
     syntaxKeyword: string;
     syntaxString: string;
@@ -38,7 +51,7 @@ export interface ThemeDefinition {
     syntaxOperator: string;
     syntaxClass: string;
     syntaxTag: string;
-    
+
     // Special elements
     tableHeaderBg: string;
     tableHeaderText: string;
@@ -49,11 +62,12 @@ export interface ThemeDefinition {
 }
 
 export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
-  // GitHub Light
+  // GitHub Light — high-contrast, clean white background
   'github-light': {
     name: 'github-light',
     displayName: 'GitHub Light',
     variant: 'light',
+    font: "'JetBrains Mono', ui-monospace, monospace",
     colors: {
       bgPrimary: '#ffffff',
       bgSecondary: '#f6f8fa',
@@ -86,50 +100,13 @@ export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
       checkboxUnchecked: '#d0d7de',
     },
   },
-  
-  // GitHub Dark
-  'github-dark': {
-    name: 'github-dark',
-    displayName: 'GitHub Dark',
-    variant: 'dark',
-    colors: {
-      bgPrimary: '#0d1117',
-      bgSecondary: '#161b22',
-      bgCode: '#0d1117',
-      bgBlockquote: '#0d1117',
-      bgInlineCode: '#161b22',
-      bgSelection: '#388bfd26',
-      textPrimary: '#e6edf3',
-      textHeading: '#79c0ff',
-      textMuted: '#8b949e',
-      linkColor: '#58a6ff',
-      linkHover: '#79c0ff',
-      linkVisited: '#bc8ef7',
-      borderColor: '#30363d',
-      borderMuted: '#21262d',
-      borderBlockquote: '#30363d',
-      syntaxKeyword: '#ff7b72',
-      syntaxString: '#a5d6ff',
-      syntaxNumber: '#79c0ff',
-      syntaxComment: '#8b949e',
-      syntaxFunction: '#d2a8ff',
-      syntaxVariable: '#79c0ff',
-      syntaxOperator: '#ff7b72',
-      syntaxClass: '#d2a8ff',
-      syntaxTag: '#79c0ff',
-      tableHeaderBg: '#161b22',
-      tableHeaderText: '#e6edf3',
-      tableRowAlt: '#0d1117',
-      checkboxChecked: '#58a6ff',
-      checkboxUnchecked: '#30363d',
-    },
-  },
-  
-  // Dracula
+
+  // Dracula — high-contrast, purple/pink accents on deep gray
   'dracula': {
     name: 'dracula',
     displayName: 'Dracula',
     variant: 'dark',
+    font: "'Fira Code', ui-monospace, monospace",
     colors: {
       bgPrimary: '#282a36',
       bgSecondary: '#1e1f29',
@@ -162,50 +139,13 @@ export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
       checkboxUnchecked: '#44475a',
     },
   },
-  
-  // Nord Light
-  'nord-light': {
-    name: 'nord-light',
-    displayName: 'Nord Light',
-    variant: 'light',
-    colors: {
-      bgPrimary: '#eceff4',
-      bgSecondary: '#e5e9f0',
-      bgCode: '#e5e9f0',
-      bgBlockquote: '#d8dee9',
-      bgInlineCode: '#d8dee9',
-      bgSelection: '#d8dee9',
-      textPrimary: '#2e3440',
-      textHeading: '#5e81ac',
-      textMuted: '#4c566a',
-      linkColor: '#81a1c1',
-      linkHover: '#88c0d0',
-      linkVisited: '#b48ead',
-      borderColor: '#d8dee9',
-      borderMuted: '#e5e9f0',
-      borderBlockquote: '#81a1c1',
-      syntaxKeyword: '#81a1c1',
-      syntaxString: '#a3be8c',
-      syntaxNumber: '#b48ead',
-      syntaxComment: '#4c566a',
-      syntaxFunction: '#88c0d0',
-      syntaxVariable: '#81a1c1',
-      syntaxOperator: '#2e3440',
-      syntaxClass: '#8fbcbb',
-      syntaxTag: '#81a1c1',
-      tableHeaderBg: '#d8dee9',
-      tableHeaderText: '#2e3440',
-      tableRowAlt: '#e5e9f0',
-      checkboxChecked: '#81a1c1',
-      checkboxUnchecked: '#d8dee9',
-    },
-  },
-  
-  // Nord Dark
-  'nord-dark': {
-    name: 'nord-dark',
-    displayName: 'Nord Dark',
+
+  // Nord — low-contrast, cool polar-blue palette
+  'nord': {
+    name: 'nord',
+    displayName: 'Nord',
     variant: 'dark',
+    font: "'Cascadia Code', ui-monospace, monospace",
     colors: {
       bgPrimary: '#2e3440',
       bgSecondary: '#3b4252',
@@ -238,50 +178,13 @@ export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
       checkboxUnchecked: '#434c5e',
     },
   },
-  
-  // Solarized Light
-  'solarized-light': {
-    name: 'solarized-light',
-    displayName: 'Solarized Light',
-    variant: 'light',
-    colors: {
-      bgPrimary: '#fdf6e3',
-      bgSecondary: '#eee8d5',
-      bgCode: '#eee8d5',
-      bgBlockquote: '#eee8d5',
-      bgInlineCode: '#eee8d5',
-      bgSelection: '#d6d0bf',
-      textPrimary: '#657b83',
-      textHeading: '#268bd2',
-      textMuted: '#93a1a1',
-      linkColor: '#268bd2',
-      linkHover: '#2aa198',
-      linkVisited: '#6c71c4',
-      borderColor: '#d6d0bf',
-      borderMuted: '#eee8d5',
-      borderBlockquote: '#2aa198',
-      syntaxKeyword: '#859900',
-      syntaxString: '#2aa198',
-      syntaxNumber: '#d33682',
-      syntaxComment: '#93a1a1',
-      syntaxFunction: '#268bd2',
-      syntaxVariable: '#268bd2',
-      syntaxOperator: '#859900',
-      syntaxClass: '#268bd2',
-      syntaxTag: '#268bd2',
-      tableHeaderBg: '#eee8d5',
-      tableHeaderText: '#657b83',
-      tableRowAlt: '#fdf6e3',
-      checkboxChecked: '#268bd2',
-      checkboxUnchecked: '#d6d0bf',
-    },
-  },
-  
-  // Solarized Dark
+
+  // Solarized Dark — mid/low-contrast, scientifically-derived palette
   'solarized-dark': {
     name: 'solarized-dark',
     displayName: 'Solarized Dark',
     variant: 'dark',
+    font: "'Source Code Pro', ui-monospace, monospace",
     colors: {
       bgPrimary: '#002b36',
       bgSecondary: '#073642',
@@ -312,6 +215,123 @@ export const THEME_NAMES: Record<ThemeName, ThemeDefinition> = {
       tableRowAlt: '#002b36',
       checkboxChecked: '#859900',
       checkboxUnchecked: '#073642',
+    },
+  },
+
+  // One Dark Pro — mid/high-contrast, Atom-style dark
+  'one-dark-pro': {
+    name: 'one-dark-pro',
+    displayName: 'One Dark Pro',
+    variant: 'dark',
+    font: "'Fira Code', ui-monospace, monospace",
+    colors: {
+      bgPrimary: '#282c34',
+      bgSecondary: '#21252b',
+      bgCode: '#21252b',
+      bgBlockquote: '#21252b',
+      bgInlineCode: '#3a3f4b',
+      bgSelection: '#3e445166',
+      textPrimary: '#abb2bf',
+      textHeading: '#61afef',
+      textMuted: '#5c6370',
+      linkColor: '#61afef',
+      linkHover: '#56b6c2',
+      linkVisited: '#c678dd',
+      borderColor: '#3e4451',
+      borderMuted: '#333842',
+      borderBlockquote: '#61afef',
+      syntaxKeyword: '#c678dd',
+      syntaxString: '#98c379',
+      syntaxNumber: '#d19a66',
+      syntaxComment: '#5c6370',
+      syntaxFunction: '#61afef',
+      syntaxVariable: '#e06c75',
+      syntaxOperator: '#56b6c2',
+      syntaxClass: '#e5c07b',
+      syntaxTag: '#e06c75',
+      tableHeaderBg: '#21252b',
+      tableHeaderText: '#abb2bf',
+      tableRowAlt: '#2c313c',
+      checkboxChecked: '#98c379',
+      checkboxUnchecked: '#3e4451',
+    },
+  },
+
+  // Tokyo Night — cool violet/blue, cyberpunk city-night feel
+  'tokyo-night': {
+    name: 'tokyo-night',
+    displayName: 'Tokyo Night',
+    variant: 'dark',
+    font: "'JetBrains Mono', ui-monospace, monospace",
+    colors: {
+      bgPrimary: '#1a1b26',
+      bgSecondary: '#16161e',
+      bgCode: '#16161e',
+      bgBlockquote: '#16161e',
+      bgInlineCode: '#24283b',
+      bgSelection: '#33467c',
+      textPrimary: '#c0caf5',
+      textHeading: '#7aa2f7',
+      textMuted: '#565f89',
+      linkColor: '#7aa2f7',
+      linkHover: '#7dcfff',
+      linkVisited: '#bb9af7',
+      borderColor: '#292e42',
+      borderMuted: '#1f2335',
+      borderBlockquote: '#7aa2f7',
+      syntaxKeyword: '#bb9af7',
+      syntaxString: '#9ece6a',
+      syntaxNumber: '#ff9e64',
+      syntaxComment: '#565f89',
+      syntaxFunction: '#7aa2f7',
+      syntaxVariable: '#c0caf5',
+      syntaxOperator: '#89ddff',
+      syntaxClass: '#e0af68',
+      syntaxTag: '#f7768e',
+      tableHeaderBg: '#1f2335',
+      tableHeaderText: '#c0caf5',
+      tableRowAlt: '#1f2335',
+      checkboxChecked: '#9ece6a',
+      checkboxUnchecked: '#292e42',
+    },
+  },
+
+  // Gruvbox — warm, low-saturation retro palette
+  'gruvbox': {
+    name: 'gruvbox',
+    displayName: 'Gruvbox',
+    variant: 'dark',
+    font: "'Hack', ui-monospace, monospace",
+    colors: {
+      bgPrimary: '#282828',
+      bgSecondary: '#32302f',
+      bgCode: '#32302f',
+      bgBlockquote: '#32302f',
+      bgInlineCode: '#3c3836',
+      bgSelection: '#504945',
+      textPrimary: '#ebdbb2',
+      textHeading: '#fabd2f',
+      textMuted: '#928374',
+      linkColor: '#83a598',
+      linkHover: '#8ec07c',
+      linkVisited: '#d3869b',
+      borderColor: '#3c3836',
+      borderMuted: '#32302f',
+      borderBlockquote: '#fabd2f',
+      syntaxKeyword: '#fb4934',
+      syntaxString: '#b8bb26',
+      syntaxNumber: '#d3869b',
+      syntaxComment: '#928374',
+      syntaxFunction: '#8ec07c',
+      syntaxVariable: '#83a598',
+      syntaxOperator: '#fe8019',
+      syntaxClass: '#fabd2f',
+      syntaxTag: '#fb4934',
+      tableHeaderBg: '#3c3836',
+      tableHeaderText: '#ebdbb2',
+      tableRowAlt: '#32302f',
+      checkboxChecked: '#b8bb26',
+      checkboxUnchecked: '#3c3836',
     },
   },
 };

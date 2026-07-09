@@ -41,7 +41,6 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
   const documents = useDocumentStore((state) => state.documents);
   const updateContent = useDocumentStore((state) => state.updateContent);
   const fontSize = useUIStore((state) => state.fontSize);
-  const fontFamily = useUIStore((state) => state.fontFamily);
   const findBarVisible = useUIStore((state) => state.findBarVisible);
   const setFindBarVisible = useUIStore((state) => state.setFindBarVisible);
   const setPendingAnchor = useEditorStore((state) => state.setPendingAnchor);
@@ -413,7 +412,7 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
           className="h-full w-full resize-none bg-transparent focus:outline-none leading-relaxed"
           style={{
             fontSize: `${fontSize}px`,
-            fontFamily: fontFamily.includes('mono') ? fontFamily : `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
+            fontFamily: 'var(--font-editor)',
             maxWidth: `${layoutMetrics.contentWidth}px`,
           }}
           onChange={handleChange}

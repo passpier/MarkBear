@@ -34,7 +34,6 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
   const documents = useDocumentStore((state) => state.documents);
   const updateContent = useDocumentStore((state) => state.updateContent);
   const fontSize = useUIStore((state) => state.fontSize);
-  const fontFamily = useUIStore((state) => state.fontFamily);
   const setEditor = useEditorStore((state) => state.setEditor);
   const setPendingAnchor = useEditorStore((state) => state.setPendingAnchor);
   const consumePendingAnchor = useEditorStore((state) => state.consumePendingAnchor);
@@ -410,18 +409,18 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Apply font settings and responsive layout
+  // Apply font size and responsive layout. Font-family is theme-driven via
+  // the --font-editor CSS var (see index.css .tiptap), not set inline here.
   useEffect(() => {
     if (editor) {
       const editorElement = editor.view.dom;
       editorElement.style.fontSize = `${fontSize}px`;
-      editorElement.style.fontFamily = fontFamily;
-      
+
       // Apply responsive width based on layout metrics
       editorElement.style.maxWidth = `${layoutMetrics.contentWidth}px`;
       editorElement.style.width = '100%';
     }
-  }, [fontSize, fontFamily, editor, layoutMetrics.contentWidth]);
+  }, [fontSize, editor, layoutMetrics.contentWidth]);
 
   useEffect(() => {
     if (!hasMeasuredLayout && layoutMetrics.contentWidth > 0) {

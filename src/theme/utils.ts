@@ -118,6 +118,10 @@ export function applyTheme(themeName: ThemeName): void {
   setCSSVar('--line-highlight-bg', colors.borderMuted);
   setCSSVar('--line-number-color', colors.textMuted);
 
+  // Editor writing-surface font (raw font-family stack, not a color — must
+  // NOT go through hexToHSL). Drives .tiptap and code fonts in index.css.
+  root.style.setProperty('--font-editor', theme.font);
+
   // Toggle Tailwind's `.dark` class and native color-scheme so `dark:`
   // utilities and native form controls/scrollbars follow the selected
   // theme (the app never switches theme via OS preference alone).
@@ -139,7 +143,7 @@ export function detectSystemTheme(): 'light' | 'dark' {
  * Get the appropriate default theme based on system preference
  */
 export function getDefaultTheme(systemTheme: 'light' | 'dark'): ThemeName {
-  return systemTheme === 'dark' ? 'github-dark' : 'github-light';
+  return systemTheme === 'dark' ? 'one-dark-pro' : 'github-light';
 }
 
 /**

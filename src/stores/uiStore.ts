@@ -7,7 +7,6 @@ interface UIState {
   currentTheme: ThemeName;
   sidebarVisible: boolean;
   fontSize: number;
-  fontFamily: string;
   sidebarWidth: number;
   osPlatform: 'macos' | 'windows' | 'gnome' | null;
   editorMode: 'wysiwyg' | 'source';
@@ -21,7 +20,6 @@ interface UIState {
   toggleSidebar: () => void;
   setSidebarVisible: (visible: boolean) => void;
   setFontSize: (size: number) => void;
-  setFontFamily: (family: string) => void;
   setSidebarWidth: (width: number) => void;
   setOsPlatform: (platform: 'macos' | 'windows' | 'gnome') => void;
   setEditorMode: (mode: 'wysiwyg' | 'source') => void;
@@ -34,7 +32,7 @@ interface UIState {
   setSidebarTab: (tab: 'files' | 'outline') => void;
 }
 
-type PersistedUIState = Pick<UIState, 'currentTheme' | 'sidebarVisible' | 'fontSize' | 'fontFamily' | 'sidebarWidth' | 'sidebarQuery' | 'sidebarTab'>;
+type PersistedUIState = Pick<UIState, 'currentTheme' | 'sidebarVisible' | 'fontSize' | 'sidebarWidth' | 'sidebarQuery' | 'sidebarTab'>;
 
 export const useUIStore = create<UIState>()(
   persist(
@@ -42,7 +40,6 @@ export const useUIStore = create<UIState>()(
       currentTheme: 'github-light',
       sidebarVisible: false,
       fontSize: 16,
-      fontFamily: 'system-ui, -apple-system, sans-serif',
       sidebarWidth: 280,
       editorMode: 'wysiwyg',
       sidebarQuery: '',
@@ -100,8 +97,6 @@ export const useUIStore = create<UIState>()(
 
       setFontSize: (size) => set({ fontSize: size }),
 
-      setFontFamily: (family) => set({ fontFamily: family }),
-
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
 
       setOsPlatform: (platform: 'macos' | 'windows' | 'gnome') =>
@@ -133,13 +128,33 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'ui-preferences',
-      version: 3,
-      migrate: (persistedState) => persistedState,
+      version: 4,
+      // v3 -> v4: the theme set was overhauled (github-dark, nord-light,
+      // solarized-light dropped; nord-dark renamed to nord). Remap anyone
+      // persisted on a removed key to its closest replacement so applyTheme
+      // doesn't silently no-op and strand them on stale CSS defaults. Also
+      // drops the removed `fontFamily` field (now theme-driven), which
+      // `partialize` simply omits going forward.
+      migrate: (persistedState) => {
+        const state = persistedState as Partial<UIState> | undefined;
+        if (!state || typeof state !== 'object') return state;
+
+        const themeMigrations: Record<string, ThemeName> = {
+          'github-dark': 'one-dark-pro',
+          'nord-dark': 'nord',
+          'nord-light': 'nord',
+          'solarized-light': 'solarized-dark',
+        };
+        const currentTheme = state.currentTheme as unknown as string | undefined;
+        if (currentTheme && currentTheme in themeMigrations) {
+          return { ...state, currentTheme: themeMigrations[currentTheme] };
+        }
+        return state;
+      },
       partialize: (state): PersistedUIState => ({
         currentTheme: state.currentTheme,
         sidebarVisible: state.sidebarVisible,
         fontSize: state.fontSize,
-        fontFamily: state.fontFamily,
         sidebarWidth: state.sidebarWidth,
         sidebarQuery: state.sidebarQuery,
         sidebarTab: state.sidebarTab,

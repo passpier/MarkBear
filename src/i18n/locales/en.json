@@ -54,12 +54,12 @@
     "light_themes": "Light Themes",
     "dark_themes": "Dark Themes",
     "github-light": "GitHub Light",
-    "github-dark": "GitHub Dark",
     "dracula": "Dracula",
-    "nord-light": "Nord Light",
-    "nord-dark": "Nord Dark",
-    "solarized-light": "Solarized Light",
-    "solarized-dark": "Solarized Dark"
+    "nord": "Nord",
+    "solarized-dark": "Solarized Dark",
+    "one-dark-pro": "One Dark Pro",
+    "tokyo-night": "Tokyo Night",
+    "gruvbox": "Gruvbox"
   },
   "menu": {
     "file": "File",

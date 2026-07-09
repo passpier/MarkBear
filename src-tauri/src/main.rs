@@ -1038,17 +1038,17 @@ fn create_app_menu<R: tauri::Runtime>(handle: &AppHandle<R>, lang: &str) -> taur
 
     // View Menu
     let theme_github_light = MenuItem::with_id(handle, "view_theme_github_light", "GitHub Light", true, None::<&str>)?;
-    let theme_github_dark = MenuItem::with_id(handle, "view_theme_github_dark", "GitHub Dark", true, None::<&str>)?;
     let theme_dracula = MenuItem::with_id(handle, "view_theme_dracula", "Dracula", true, None::<&str>)?;
-    let theme_nord_light = MenuItem::with_id(handle, "view_theme_nord_light", "Nord Light", true, None::<&str>)?;
-    let theme_nord_dark = MenuItem::with_id(handle, "view_theme_nord_dark", "Nord Dark", true, None::<&str>)?;
-    let theme_solarized_light = MenuItem::with_id(handle, "view_theme_solarized_light", "Solarized Light", true, None::<&str>)?;
+    let theme_nord = MenuItem::with_id(handle, "view_theme_nord", "Nord", true, None::<&str>)?;
     let theme_solarized_dark = MenuItem::with_id(handle, "view_theme_solarized_dark", "Solarized Dark", true, None::<&str>)?;
+    let theme_one_dark_pro = MenuItem::with_id(handle, "view_theme_one_dark_pro", "One Dark Pro", true, None::<&str>)?;
+    let theme_tokyo_night = MenuItem::with_id(handle, "view_theme_tokyo_night", "Tokyo Night", true, None::<&str>)?;
+    let theme_gruvbox = MenuItem::with_id(handle, "view_theme_gruvbox", "Gruvbox", true, None::<&str>)?;
     let theme_menu = Submenu::with_items(
         handle,
         get_label(lang, "view_theme"),
         true,
-        &[&theme_github_light, &theme_github_dark, &theme_dracula, &theme_nord_light, &theme_nord_dark, &theme_solarized_light, &theme_solarized_dark],
+        &[&theme_github_light, &theme_dracula, &theme_nord, &theme_solarized_dark, &theme_one_dark_pro, &theme_tokyo_night, &theme_gruvbox],
     )?;
 
     let lang_en_item = CheckMenuItem::with_id(handle, "lang_en", get_label(lang, "lang_en"), true, lang == "en", None::<&str>)?;
@@ -1215,18 +1215,18 @@ fn main() {
                 let _ = app.emit("menu-toggle-editor-mode", ());
             } else if event.id() == "view_theme_github_light" {
                 let _ = app.emit("menu-set-theme", "github-light");
-            } else if event.id() == "view_theme_github_dark" {
-                let _ = app.emit("menu-set-theme", "github-dark");
             } else if event.id() == "view_theme_dracula" {
                 let _ = app.emit("menu-set-theme", "dracula");
-            } else if event.id() == "view_theme_nord_light" {
-                let _ = app.emit("menu-set-theme", "nord-light");
-            } else if event.id() == "view_theme_nord_dark" {
-                let _ = app.emit("menu-set-theme", "nord-dark");
-            } else if event.id() == "view_theme_solarized_light" {
-                let _ = app.emit("menu-set-theme", "solarized-light");
+            } else if event.id() == "view_theme_nord" {
+                let _ = app.emit("menu-set-theme", "nord");
             } else if event.id() == "view_theme_solarized_dark" {
                 let _ = app.emit("menu-set-theme", "solarized-dark");
+            } else if event.id() == "view_theme_one_dark_pro" {
+                let _ = app.emit("menu-set-theme", "one-dark-pro");
+            } else if event.id() == "view_theme_tokyo_night" {
+                let _ = app.emit("menu-set-theme", "tokyo-night");
+            } else if event.id() == "view_theme_gruvbox" {
+                let _ = app.emit("menu-set-theme", "gruvbox");
             } else if event.id() == "lang_en" {
                 println!("🌐 User selected: English");
                 // Save preference to persistent storage
