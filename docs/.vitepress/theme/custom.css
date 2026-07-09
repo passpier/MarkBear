@@ -1,0 +1,200 @@
+/*
+ * Custom home-page styling, ported from the original hand-written
+ * docs/index.html landing page. Colors are expressed via VitePress's
+ * theme CSS variables (--vp-c-*) instead of the original's hardcoded
+ * hex values, so the same hero/table/grid layout looks correct in both
+ * light and dark mode (VitePress's built-in theme toggle just works).
+ */
+
+.pourdown-home {
+  --pd-radius: 8px;
+  --pd-max-w: 960px;
+}
+
+.pourdown-home .pd-container {
+  max-width: var(--pd-max-w);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ── Hero ── */
+.pourdown-home .pd-hero {
+  padding: 64px 0 48px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--vp-c-bg-alt) 0%, var(--vp-c-bg) 100%);
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+.pourdown-home .pd-hero h1 {
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 16px;
+  line-height: 1.15;
+  border-top: none;
+  padding-top: 0;
+}
+.pourdown-home .pd-hero .pd-tagline {
+  font-size: 1.2rem;
+  color: var(--vp-c-text-2);
+  max-width: 600px;
+  margin: 0 auto 32px;
+}
+.pourdown-home .pd-cta-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.pourdown-home .pd-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: var(--pd-radius);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: opacity 0.15s;
+  text-decoration: none !important;
+}
+.pourdown-home .pd-btn:hover {
+  opacity: 0.85;
+}
+.pourdown-home .pd-btn-primary {
+  background: var(--vp-c-brand-1);
+  color: #fff;
+}
+.pourdown-home .pd-btn-secondary {
+  background: var(--vp-c-bg);
+  color: var(--vp-c-text-1);
+  border-color: var(--vp-c-divider);
+}
+
+/* ── Screenshot ── */
+.pourdown-home .pd-screenshot {
+  padding: 48px 0;
+  text-align: center;
+}
+.pourdown-home .pd-screenshot img {
+  width: 100%;
+  max-width: 860px;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--vp-c-divider);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* ── Section ── */
+.pourdown-home .pd-section {
+  padding: 48px 0;
+}
+.pourdown-home .pd-section-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.pourdown-home .pd-section-sub {
+  color: var(--vp-c-text-2);
+  margin-bottom: 28px;
+}
+
+/* ── Conversion table ── */
+.pourdown-home table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--pd-radius);
+  overflow: hidden;
+  display: table;
+}
+.pourdown-home th {
+  background: var(--vp-c-bg-alt);
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+.pourdown-home td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--vp-c-divider);
+  vertical-align: top;
+}
+.pourdown-home tr:last-child td {
+  border-bottom: none;
+}
+.pourdown-home .pd-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Features grid ── */
+.pourdown-home .pd-features {
+  padding: 48px 0;
+  background: var(--vp-c-bg-alt);
+  border-top: 1px solid var(--vp-c-divider);
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+.pourdown-home .pd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 24px;
+  margin-top: 28px;
+}
+.pourdown-home .pd-card {
+  background: var(--vp-c-bg);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: var(--pd-radius);
+  padding: 20px;
+}
+.pourdown-home .pd-card-icon {
+  font-size: 1.5rem;
+  margin-bottom: 10px;
+}
+.pourdown-home .pd-card h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
+}
+.pourdown-home .pd-card p {
+  font-size: 0.85rem;
+  color: var(--vp-c-text-2);
+  margin: 0;
+}
+
+/* ── Tech stack pills ── */
+.pourdown-home .pd-tech {
+  padding: 40px 0;
+  text-align: center;
+}
+.pourdown-home .pd-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+}
+.pourdown-home .pd-pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: var(--vp-c-bg-alt);
+  border: 1px solid var(--vp-c-divider);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .pourdown-home .pd-hero {
+    padding: 40px 0 32px;
+  }
+}

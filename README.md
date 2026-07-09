@@ -2,25 +2,27 @@
   <img src="./app-icon.png" alt="Pourdown icon" width="128" height="128">
 </p>
 
-# Pourdown
+<h1 align="center">Pourdown</h1>
 
-**Turn any document into clean, editable Markdown.**
+<p align="center"><strong>Turn any document into clean, editable Markdown.</strong></p>
 
-[![GitHub release](https://img.shields.io/github/v/release/passpier/Pourdown?label=Download&color=0969da)](https://github.com/passpier/Pourdown/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](#install-an-unsigned-development-desktop-build)
-[![Website](https://img.shields.io/badge/website-passpier.github.io%2FPourdown-blue)](https://passpier.github.io/Pourdown/)
+<p align="center">
+  <a href="https://github.com/passpier/Pourdown/releases/latest"><img src="https://img.shields.io/github/v/release/passpier/Pourdown?label=Download&color=0969da" alt="GitHub release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
+  <a href="#install-an-unsigned-development-desktop-build"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey" alt="Platform"></a>
+  <a href="https://passpier.github.io/Pourdown/"><img src="https://img.shields.io/badge/website-passpier.github.io%2FPourdown-blue" alt="Website"></a>
+</p>
 
-A desktop Markdown editor that imports Word files, spreadsheets, PDFs, and presentations in one click, then lets you write and edit with a live visual preview — free, offline, and open source.
+<p align="center">A desktop Markdown editor that imports Word files, spreadsheets, PDFs, and presentations in one click, then lets you write and edit with a live visual preview — free, offline, and open source.</p>
 
-**🌐 Website:** https://passpier.github.io/Pourdown/
+<p align="center"><a href="https://passpier.github.io/Pourdown/"><strong>🌐 Website</strong></a></p>
 
 ## Screenshots
 
 <table>
   <tr>
-    <td><img src="./screenshots/home.png" alt="Home Page" width="100%"></td>
-    <td><img src="./screenshots/home_without_sidebar.png" alt="Home Without Sidebar Page" width="100%"></td>
+    <td><img src="./screenshots/home_with_no_file_sidebar.png" alt="Home Page" width="100%"></td>
+    <td><img src="./screenshots/home_with_outline_sidebar.png" alt="Home Without Sidebar Page" width="100%"></td>
   </tr>
 </table>
 
@@ -37,14 +39,6 @@ and up to 96% more efficient than raw PDF when fed to LLMs
 This approach was inspired by Microsoft's [MarkItDown](https://github.com/microsoft/markitdown);
 see [`markdown-import.md`](markdown-import.md) for how Pourdown's
 Rust implementation works and how it differs.
-
-**How to import:** File → Import → choose your format. The file opens immediately as a new Markdown document.
-
-<table>
-  <tr>
-    <td><img src="./screenshots/import_result.png" alt="Import result — Word document converted to Markdown" width="100%"></td>
-  </tr>
-</table>
 
 ### What gets converted
 
@@ -153,6 +147,14 @@ msiexec /i (Get-ChildItem Pourdown_*_x64_en-US.msi).FullName
 ```
 
 For `.exe` installers, SmartScreen may still require a one-time manual "More info" → "Run anyway".
+
+## Contributing
+
+Contributions are welcome! See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup
+steps, the test-first workflow for conversion changes, and the PR process.
+The [docs site](https://passpier.github.io/Pourdown/) has a full user guide
+(English / 繁體中文) if you want to understand a feature in more depth than
+this README covers.
 
 ## Acknowledgements
 

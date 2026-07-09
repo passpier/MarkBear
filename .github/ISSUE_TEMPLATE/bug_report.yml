@@ -1,0 +1,87 @@
+name: Bug report
+description: Report something that isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill in as much of this as you can.
+
+  - type: input
+    id: version
+    attributes:
+      label: Pourdown version
+      description: Help → About, or the version in the release you downloaded
+      placeholder: "0.5.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area affected
+      options:
+        - Document import (Word/Excel/PDF/PowerPoint)
+        - Editor (WYSIWYG / Source mode)
+        - File management (open/save/sidebar)
+        - Search / Find & Replace
+        - Themes / UI
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, step by step?
+      placeholder: |
+        1. File → Import → select a .pptx file
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: sample-file
+    attributes:
+      label: Sample file (if import-related)
+      description: >
+        If this is an import bug, attaching (or linking) a minimal sample
+        file that reproduces it is the single most useful thing you can
+        provide. Remove any sensitive content first.
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / error output
+      description: Anything printed to the terminal when running `pnpm tauri dev`, if applicable
+      render: shell
+    validations:
+      required: false

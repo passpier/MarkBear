@@ -10,6 +10,7 @@ yarn-error.log
 dist/
 build/
 .vite/
+docs/.vitepress/cache/
 
 # Tauri build artifacts
 src-tauri/target/

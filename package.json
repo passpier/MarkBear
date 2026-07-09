@@ -8,7 +8,10 @@
     "lint": "tsc --noEmit && eslint .",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",
@@ -60,6 +63,7 @@
     "terser": "^5.46.1",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.62.1",
-    "vite": "^5.0.8"
+    "vite": "^5.0.8",
+    "vitepress": "^1.6.4"
   }
 }
