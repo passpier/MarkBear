@@ -97,8 +97,22 @@ standardized read/print, respectively).
 
 - Text is extracted per page as positioned blocks (x/y coordinates + font
   size), not as a raw text stream.
-- Blocks are grouped into visual lines by vertical proximity, then sorted
-  top-to-bottom and left-to-right to reconstruct reading order.
+- Standard two-column layouts (IEEE Access and similar journals) are
+  detected before reading order is reconstructed: `detect_gutter` looks for a
+  vertical strip repeatedly uncrossed by text across several lines (mirroring
+  the same "require repeated structural evidence" gate used for table
+  detection, not just one incidental gap), and `segment_page` splits the page
+  into full-width dividers (titles, running headers/footers, wide
+  figures/tables) and two-column bands, each read top-to-bottom
+  independently — left column in full, then right column. Pages without a
+  detected gutter fall back to the original single-column path unchanged.
+- Within each region, blocks are grouped into visual lines by vertical
+  proximity, then sorted top-to-bottom and left-to-right to reconstruct
+  reading order. Consecutive plain body lines are reflowed into single
+  paragraphs, de-hyphenating words that wrapped across a line break (e.g.
+  "bet-\nter" becomes "better") — a heuristic that only fires on an explicit
+  hyphen character, so a line break with no literal hyphen glyph in the PDF's
+  text stream isn't rejoined.
 - Heading levels are inferred from font-size ratio relative to the page's
   median (body) font size, with an ALL-CAPS short-line heuristic as a fallback
   when font sizes don't vary.
@@ -153,10 +167,16 @@ rather than a broken image link.
 - xlsx import is capped at 500 rows per sheet; embedded images can't be
   mapped to a specific sheet/cell and are listed separately.
 - PDF import infers layout, not an exact reconstruction; image placement in
-  complex/multi-column layouts is approximate. Table detection is
-  conservative by design: a table whose wrapped cell content is itself an
-  indented/bulleted list (outside the column-alignment tolerance) drops that
-  row back to plain paragraphs rather than corrupting the table.
+  complex layouts is approximate. Table detection is conservative by design:
+  a table whose wrapped cell content is itself an indented/bulleted list
+  (outside the column-alignment tolerance) drops that row back to plain
+  paragraphs rather than corrupting the table.
+- Two-column detection targets the common two-column journal layout
+  specifically; three-or-more-column layouts, mixed/irregular column widths,
+  and rotated text aren't handled and fall back to single-column reading
+  order. Repeated running headers/footers (page numbers, author/title
+  strips) aren't stripped — they appear inline as short full-width lines
+  wherever they fall in reading order.
 - docx, pptx, and PDF images in vector formats (EMF/WMF) can't be rendered by
   the webview and are replaced with a text note.
 - pptx animations are dropped (not representable in Markdown).

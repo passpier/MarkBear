@@ -10,9 +10,10 @@ use super::ConversionError;
 static PDFIUM_INIT: Mutex<bool> = Mutex::new(false);
 
 const PDF_IMPORT_NOTICE: &str = "> **Import Notice**: This PDF was imported with layout analysis. \
-Headings and paragraphs are inferred from font sizes and spacing. \
-Embedded images are extracted where possible, but exact positioning and \
-complex multi-column layouts may not be fully preserved.\n\n";
+Headings and paragraphs are inferred from font sizes and spacing, and standard \
+two-column layouts are detected and read column-by-column. Embedded images are \
+extracted where possible, but exact positioning and complex/irregular layouts \
+may not be fully preserved.\n\n";
 
 /// Convert Markdown to a PDF file.
 pub fn markdown_to_pdf(markdown: &str, path: &str) -> Result<(), ConversionError> {
@@ -296,6 +297,60 @@ fn ensure_blank_line(out: &mut String) {
     }
 }
 
+/// Flushes an in-progress paragraph accumulator to `out` as a Markdown
+/// paragraph (trailing blank line), leaving `paragraph` empty. A no-op if
+/// there's nothing accumulated, so call sites can call it unconditionally at
+/// every paragraph-break point (heading, list item, table, big vertical gap,
+/// region boundary) without checking emptiness themselves.
+fn flush_paragraph(out: &mut String, paragraph: &mut String) {
+    if !paragraph.is_empty() {
+        out.push_str(paragraph);
+        out.push_str("\n\n");
+        paragraph.clear();
+    }
+}
+
+/// True if `text` looks like a bullet or numbered list item, so it stays out
+/// of paragraph reflow (each item is emitted on its own line rather than
+/// being folded into surrounding prose).
+fn is_list_marker(text: &str) -> bool {
+    let t = text.trim_start();
+    let mut chars = t.chars();
+    if matches!(chars.next(), Some('•') | Some('-') | Some('*')) {
+        return t.chars().nth(1) == Some(' ');
+    }
+    // "1. " / "1) " / "IV. " style: a short alphanumeric prefix followed by
+    // '.' or ')' and a space.
+    let prefix_len = t.chars().take_while(|c| c.is_ascii_alphanumeric()).count();
+    if prefix_len == 0 || prefix_len > 3 {
+        return false;
+    }
+    let rest = &t[prefix_len..];
+    rest.starts_with(". ") || rest.starts_with(") ")
+}
+
+/// Appends a wrapped continuation line `next` onto paragraph accumulator
+/// `acc`. Normally joins with a single space; but if `acc` ends with a
+/// hyphen and `next` starts with a lowercase letter, the hyphen is treated
+/// as a PDF line-wrap split and removed so the word rejoins (e.g. "bet-" +
+/// "ter" -> "better"). A hyphen followed by an uppercase letter or
+/// non-letter is left alone (more likely a genuine hyphenated compound or
+/// proper noun boundary than a wrap split) and joined with a space instead.
+fn append_wrapped(acc: &mut String, next: &str) {
+    let next = next.trim();
+    if next.is_empty() {
+        return;
+    }
+    let ends_with_hyphen = acc.ends_with('-') || acc.ends_with('‐');
+    let next_starts_lower = next.chars().next().is_some_and(|c| c.is_lowercase());
+    if ends_with_hyphen && next_starts_lower {
+        acc.pop();
+    } else if !acc.is_empty() {
+        acc.push(' ');
+    }
+    acc.push_str(next);
+}
+
 /// True if a horizontal rule line falls strictly between `y_upper` (the
 /// previous line) and `y_lower` (the current line). Used to refuse merging a
 /// row as a continuation when the source PDF explicitly separated it with a
@@ -481,6 +536,247 @@ fn collect_horizontal_rules(page: &PdfPage) -> Vec<f32> {
     h_rules
 }
 
+/// Minimum number of distinct visual lines that must show independent,
+/// non-straddling left/right content before a candidate gutter is accepted.
+/// Mirrors `MIN_CORE_ROWS` for table detection: a single widely-spaced line
+/// (e.g. a title with generous letter-spacing, or two words of a heading)
+/// isn't evidence of a genuine two-column layout — only a *repeated*
+/// left/right split across several lines is.
+const MIN_TWO_COLUMN_LINES: usize = 4;
+
+/// Minimum fraction of the two-sided lines' total text weight that must fall
+/// outside any block straddling the candidate gutter. Guards against a
+/// gutter choice that technically clears `MIN_TWO_COLUMN_LINES` but still
+/// crosses a lot of text.
+const MIN_TWO_COLUMN_COVERAGE: f32 = 0.55;
+
+/// Minimum share of non-straddling blocks that must land on each side of
+/// the gutter, so a handful of stray blocks on one side don't count as a
+/// second column.
+const MIN_SIDE_SHARE: f32 = 0.2;
+
+/// A block's weight for gutter-coverage purposes: its font size stands in
+/// for the vertical extent it occupies (taller text "covers" more of the
+/// page height), floored at 1.0 so a degenerate zero-size block still counts.
+fn gutter_weight(b: &TextBlock) -> f32 {
+    b.font_size.max(1.0)
+}
+
+/// Attempts to find a vertical "gutter" x-coordinate splitting the page
+/// into two text columns (the layout IEEE Access and similar journals use).
+///
+/// Text is first grouped into coarse visual lines by y proximity (a rough
+/// pass — the real line grouping happens later in `render_region`; this one
+/// only needs to be good enough to count lines). For each candidate split
+/// point across the middle of the page's text width, a line counts as
+/// "two-sided" only if it has content on both sides with none of its blocks
+/// straddling the candidate. Real two-column body text produces many
+/// two-sided lines in a row; an ordinary single-column page — even one
+/// where per-word text runs leave wide incidental gaps on a title or
+/// short line — produces at most a couple, incidentally. Requiring
+/// `MIN_TWO_COLUMN_LINES` of them before accepting a candidate is what
+/// tells the two apart.
+fn detect_gutter(blocks: &[TextBlock]) -> Option<f32> {
+    let text_indices: Vec<usize> = (0..blocks.len()).filter(|&i| !blocks[i].is_image).collect();
+    if text_indices.len() < 8 {
+        return None;
+    }
+
+    let mut sizes: Vec<f32> = blocks.iter().map(|b| b.font_size).collect();
+    sizes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let body_size = sizes[sizes.len() / 2].max(1.0);
+    let line_thresh = body_size * 0.6;
+
+    let mut order = text_indices.clone();
+    order.sort_by(|&a, &b| {
+        blocks[b]
+            .y
+            .partial_cmp(&blocks[a].y)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut lines: Vec<Vec<usize>> = Vec::new();
+    for &i in &order {
+        if let Some(last) = lines.last_mut() {
+            if (blocks[last[0]].y - blocks[i].y).abs() <= line_thresh {
+                last.push(i);
+                continue;
+            }
+        }
+        lines.push(vec![i]);
+    }
+    if lines.len() < MIN_TWO_COLUMN_LINES {
+        return None;
+    }
+
+    let x_min = text_indices.iter().map(|&i| blocks[i].x).fold(f32::MAX, f32::min);
+    let x_max = text_indices
+        .iter()
+        .map(|&i| blocks[i].x_end)
+        .fold(f32::MIN, f32::max);
+    let width = x_max - x_min;
+    if width <= 0.0 {
+        return None;
+    }
+
+    let margin = 4.0;
+    let steps = 60;
+    let mut best: Option<(f32, usize, f32)> = None; // (candidate x, two-sided line count, coverage)
+    for step in 0..=steps {
+        let frac = 0.35 + 0.30 * (step as f32 / steps as f32);
+        let cand = x_min + width * frac;
+
+        let mut two_sided_lines = 0usize;
+        let mut left_count = 0usize;
+        let mut right_count = 0usize;
+        let mut straddle_weight = 0.0f32;
+        let mut total_weight = 0.0f32;
+
+        for line in &lines {
+            let mut has_left = false;
+            let mut has_right = false;
+            let mut line_straddles = false;
+            for &i in line {
+                let b = &blocks[i];
+                let w = gutter_weight(b);
+                total_weight += w;
+                if b.x < cand - margin && b.x_end > cand + margin {
+                    straddle_weight += w;
+                    line_straddles = true;
+                    continue;
+                }
+                if (b.x + b.x_end) / 2.0 < cand {
+                    has_left = true;
+                    left_count += 1;
+                } else {
+                    has_right = true;
+                    right_count += 1;
+                }
+            }
+            if has_left && has_right && !line_straddles {
+                two_sided_lines += 1;
+            }
+        }
+
+        if two_sided_lines < MIN_TWO_COLUMN_LINES {
+            continue;
+        }
+        let coverage = 1.0 - straddle_weight / total_weight.max(1.0);
+        if coverage < MIN_TWO_COLUMN_COVERAGE {
+            continue;
+        }
+        let total_side = (left_count + right_count).max(1) as f32;
+        if (left_count as f32 / total_side) < MIN_SIDE_SHARE
+            || (right_count as f32 / total_side) < MIN_SIDE_SHARE
+        {
+            continue;
+        }
+
+        let better = best.is_none_or(|(_, best_lines, best_cov)| {
+            two_sided_lines > best_lines || (two_sided_lines == best_lines && coverage > best_cov)
+        });
+        if better {
+            best = Some((cand, two_sided_lines, coverage));
+        }
+    }
+
+    best.map(|(cand, _, _)| cand)
+}
+
+/// True if a block spans across the gutter (its left edge is well left of
+/// it and its right edge is well right of it) — i.e. it's a full-width run
+/// like a title, running header/footer, or wide figure caption, rather than
+/// column-confined body text.
+fn is_full_width_block(b: &TextBlock, gutter: f32, margin: f32) -> bool {
+    b.x < gutter - margin && b.x_end > gutter + margin
+}
+
+/// One reading-order region of a page relative to a detected gutter: either
+/// a run of full-width lines (rendered as an ordinary single-column block),
+/// or a two-column band (left column rendered fully, then right column).
+#[derive(Debug)]
+enum Region {
+    Full(Vec<usize>),
+    TwoCol { left: Vec<usize>, right: Vec<usize> },
+}
+
+/// Splits a page's blocks into reading-order [`Region`]s around a detected
+/// `gutter`. Blocks are grouped into coarse visual lines (by y proximity);
+/// a line where every non-image block spans the gutter is a full-width
+/// divider (title, running header/footer, wide figure/table), which closes
+/// out any open two-column band. All other lines contribute their blocks to
+/// the current band's left or right side by which half of the gutter their
+/// center falls on.
+fn segment_page(blocks: &[TextBlock], gutter: f32, body_size: f32) -> Vec<Region> {
+    let margin = body_size * 0.5;
+
+    let mut order: Vec<usize> = (0..blocks.len()).collect();
+    order.sort_by(|&a, &b| {
+        blocks[b]
+            .y
+            .partial_cmp(&blocks[a].y)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let line_thresh = body_size * 0.6;
+    let mut line_groups: Vec<Vec<usize>> = Vec::new();
+    for &i in &order {
+        if let Some(last) = line_groups.last_mut() {
+            if (blocks[last[0]].y - blocks[i].y).abs() <= line_thresh {
+                last.push(i);
+                continue;
+            }
+        }
+        line_groups.push(vec![i]);
+    }
+
+    let mut regions: Vec<Region> = Vec::new();
+    let mut cur_left: Vec<usize> = Vec::new();
+    let mut cur_right: Vec<usize> = Vec::new();
+
+    for line in &line_groups {
+        let text_indices: Vec<usize> = line
+            .iter()
+            .copied()
+            .filter(|&i| !blocks[i].is_image)
+            .collect();
+        let is_full_line = !text_indices.is_empty()
+            && text_indices
+                .iter()
+                .all(|&i| is_full_width_block(&blocks[i], gutter, margin));
+
+        if is_full_line {
+            if !cur_left.is_empty() || !cur_right.is_empty() {
+                regions.push(Region::TwoCol {
+                    left: std::mem::take(&mut cur_left),
+                    right: std::mem::take(&mut cur_right),
+                });
+            }
+            match regions.last_mut() {
+                Some(Region::Full(v)) => v.extend_from_slice(line),
+                _ => regions.push(Region::Full(line.clone())),
+            }
+            continue;
+        }
+
+        for &i in line {
+            let center = (blocks[i].x + blocks[i].x_end) / 2.0;
+            if center < gutter {
+                cur_left.push(i);
+            } else {
+                cur_right.push(i);
+            }
+        }
+    }
+    if !cur_left.is_empty() || !cur_right.is_empty() {
+        regions.push(Region::TwoCol {
+            left: cur_left,
+            right: cur_right,
+        });
+    }
+
+    regions
+}
+
 fn extract_page_markdown(
     page: &PdfPage,
     page_index: usize,
@@ -567,11 +863,70 @@ fn extract_page_markdown(
             .join(" "));
     }
 
-    // Sort top-to-bottom (PDF y=0 is at page bottom, so higher y is higher on page)
-    blocks.sort_by(|a, b| {
-        let dy = b.y.partial_cmp(&a.y).unwrap_or(std::cmp::Ordering::Equal);
+    let h_rules = collect_horizontal_rules(page);
+    let all_indices: Vec<usize> = (0..blocks.len()).collect();
+
+    // Two-column journal layouts (IEEE Access and similar) put a left- and
+    // right-column line at the same height; grouping purely by y (as
+    // `render_region` does within a single region) would merge them into
+    // one cross-column "line", corrupting both reading order and — via the
+    // wide gap between them — table detection. So layout is decided first:
+    // no gutter found means the existing single-region path runs unchanged;
+    // a detected gutter splits the page into full-width dividers and
+    // two-column bands, each rendered as its own region.
+    let out = match detect_gutter(&blocks) {
+        None => render_region(&blocks, &all_indices, body_size, &h_rules),
+        Some(gutter) => {
+            let mut out = String::new();
+            for region in segment_page(&blocks, gutter, body_size) {
+                match region {
+                    Region::Full(indices) => {
+                        out.push_str(&render_region(&blocks, &indices, body_size, &h_rules));
+                    }
+                    Region::TwoCol { left, right } => {
+                        out.push_str(&render_region(&blocks, &left, body_size, &h_rules));
+                        out.push_str(&render_region(&blocks, &right, body_size, &h_rules));
+                    }
+                }
+            }
+            out
+        }
+    };
+
+    Ok(out)
+}
+
+/// Renders one reading-order region of a page as Markdown — either the
+/// whole page (no multi-column layout detected) or a single column of a
+/// two-column band. Groups the region's blocks into visual lines top to
+/// bottom, detects table regions within it (see [`detect_table_regions`]),
+/// and emits headings/lists/tables/images each on their own line, while
+/// consecutive plain body lines are reflowed into single paragraphs —
+/// de-hyphenating words that wrapped across the PDF's line break (see
+/// [`append_wrapped`]).
+fn render_region(
+    blocks: &[TextBlock],
+    indices: &[usize],
+    body_size: f32,
+    h_rules: &[f32],
+) -> String {
+    if indices.is_empty() {
+        return String::new();
+    }
+
+    // Sort top-to-bottom (PDF y=0 is at page bottom, so higher y is higher
+    // on page), then left-to-right within a line.
+    let mut order: Vec<usize> = indices.to_vec();
+    order.sort_by(|&a, &b| {
+        let dy = blocks[b]
+            .y
+            .partial_cmp(&blocks[a].y)
+            .unwrap_or(std::cmp::Ordering::Equal);
         if dy == std::cmp::Ordering::Equal {
-            a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal)
+            blocks[a]
+                .x
+                .partial_cmp(&blocks[b].x)
+                .unwrap_or(std::cmp::Ordering::Equal)
         } else {
             dy
         }
@@ -580,9 +935,9 @@ fn extract_page_markdown(
     // Group into visual lines by y proximity
     let line_thresh = body_size * 0.6;
     let mut lines: Vec<Vec<usize>> = Vec::new();
-    for (i, block) in blocks.iter().enumerate() {
+    for &i in &order {
         if let Some(last) = lines.last_mut() {
-            if (blocks[last[0]].y - block.y).abs() <= line_thresh {
+            if (blocks[last[0]].y - blocks[i].y).abs() <= line_thresh {
                 last.push(i);
                 continue;
             }
@@ -610,13 +965,12 @@ fn extract_page_markdown(
             if line.iter().all(|&i| blocks[i].is_image) {
                 Vec::new()
             } else {
-                segment_line_into_cells(&blocks, line, gap_thresh)
+                segment_line_into_cells(blocks, line, gap_thresh)
             }
         })
         .collect();
     let line_ys: Vec<f32> = lines.iter().map(|line| blocks[line[0]].y).collect();
-    let h_rules = collect_horizontal_rules(page);
-    let regions = detect_table_regions(&rows, &line_ys, &h_rules, body_size);
+    let regions = detect_table_regions(&rows, &line_ys, h_rules, body_size);
 
     let mut out = String::new();
     let mut prev_y = f32::MAX;
@@ -626,10 +980,14 @@ fn extract_page_markdown(
     // consecutive entries form one contiguous Markdown list and a blank line
     // opens/closes the list around non-TOC content.
     let mut prev_was_toc = false;
+    // Accumulates consecutive plain body lines into one paragraph; flushed
+    // (see `flush_paragraph`) at every paragraph-break point.
+    let mut paragraph = String::new();
 
     while i < lines.len() {
         // Emit a whole detected table region in one shot, then skip past it.
         if region_idx < regions.len() && regions[region_idx].start_line == i {
+            flush_paragraph(&mut out, &mut paragraph);
             let region = &regions[region_idx];
             let y = line_ys[i];
 
@@ -673,6 +1031,7 @@ fn extract_page_markdown(
         // of prose/headings, with the leader collapsed to a compact "…".
         let is_toc = !is_image_line && contains_dot_leader(&line_text);
         if is_toc {
+            flush_paragraph(&mut out, &mut paragraph);
             if !prev_was_toc {
                 ensure_blank_line(&mut out);
             }
@@ -689,9 +1048,12 @@ fn extract_page_markdown(
         }
         prev_was_toc = false;
 
-        // Insert blank line on large vertical gap between sections
-        if prev_y != f32::MAX && (prev_y - y) > body_size * 2.5 {
-            out.push('\n');
+        // A large vertical gap ends the current paragraph, even if this
+        // line turns out to be more plain body text (the start of a new
+        // paragraph) rather than a heading/list/image.
+        let big_gap = prev_y != f32::MAX && (prev_y - y) > body_size * 2.5;
+        if big_gap {
+            flush_paragraph(&mut out, &mut paragraph);
         }
 
         // Classify heading level: first try font size ratio, then ALL-CAPS heuristic.
@@ -710,14 +1072,25 @@ fn extract_page_markdown(
             ""
         };
 
-        out.push_str(heading);
-        out.push_str(&line_text);
-        out.push('\n');
+        let is_list = !is_image_line && heading.is_empty() && is_list_marker(&line_text);
+
+        if !heading.is_empty() || is_image_line || is_list {
+            flush_paragraph(&mut out, &mut paragraph);
+            out.push_str(heading);
+            out.push_str(&line_text);
+            out.push_str("\n\n");
+        } else if paragraph.is_empty() {
+            paragraph.push_str(&line_text);
+        } else {
+            append_wrapped(&mut paragraph, &line_text);
+        }
+
         prev_y = y;
         i += 1;
     }
+    flush_paragraph(&mut out, &mut paragraph);
 
-    Ok(out)
+    out
 }
 
 #[cfg(test)]
@@ -936,6 +1309,171 @@ mod tests {
         assert!(
             md.contains("This paragraph should survive the PDF roundtrip."),
             "body text missing:\n{md}"
+        );
+    }
+
+    #[test]
+    fn test_append_wrapped_dehyphenates_lowercase_continuation() {
+        let mut acc = String::from("bet-");
+        append_wrapped(&mut acc, "ter");
+        assert_eq!(acc, "better");
+    }
+
+    #[test]
+    fn test_append_wrapped_joins_with_space_when_no_hyphen() {
+        let mut acc = String::from("goal");
+        append_wrapped(&mut acc, "directed");
+        assert_eq!(acc, "goal directed");
+    }
+
+    #[test]
+    fn test_append_wrapped_keeps_hyphen_before_uppercase() {
+        // "Multi-" followed by a capitalized continuation is more likely a
+        // genuine compound (or the hyphen wasn't actually a wrap split) than
+        // a word broken mid-token, so it's left alone rather than merged.
+        let mut acc = String::from("Multi-");
+        append_wrapped(&mut acc, "Agent");
+        assert_eq!(acc, "Multi- Agent");
+    }
+
+    #[test]
+    fn test_is_list_marker_recognizes_bullets_and_numbers() {
+        assert!(is_list_marker("• First point"));
+        assert!(is_list_marker("- Dash bullet"));
+        assert!(is_list_marker("1. First step"));
+        assert!(is_list_marker("IV. Section heading style"));
+        assert!(!is_list_marker("This is ordinary prose."));
+        assert!(!is_list_marker("A sentence with. a period inside"));
+    }
+
+    #[test]
+    fn test_detect_gutter_finds_split_for_two_column_layout() {
+        let mut blocks = Vec::new();
+        for row in 0..6 {
+            let y = 500.0 - row as f32 * 20.0;
+            blocks.push(text_block(0.0, y, "Left column text here"));
+            blocks.push(text_block(250.0, y, "Right column text here"));
+        }
+        let gutter = detect_gutter(&blocks);
+        assert!(gutter.is_some(), "expected a gutter to be detected");
+        let g = gutter.unwrap();
+        assert!(
+            (100.0..250.0).contains(&g),
+            "gutter {g} not between the two columns"
+        );
+    }
+
+    #[test]
+    fn test_detect_gutter_returns_none_for_single_column_layout() {
+        let mut blocks = Vec::new();
+        for row in 0..8 {
+            let y = 500.0 - row as f32 * 20.0;
+            blocks.push(text_block(
+                0.0,
+                y,
+                "A full width line of body text spanning the page",
+            ));
+        }
+        assert!(detect_gutter(&blocks).is_none());
+    }
+
+    #[test]
+    fn test_detect_gutter_finds_split_with_full_width_heading_present() {
+        // A full-width heading line plus a two-column body below it — the
+        // heading straddles every candidate gutter, but shouldn't prevent
+        // detection since the body still dominates the page.
+        let mut blocks = vec![text_block(
+            0.0,
+            600.0,
+            "A full width line of body text spanning the page",
+        )];
+        for row in 0..6 {
+            let y = 580.0 - row as f32 * 20.0;
+            blocks.push(text_block(0.0, y, "Left column text here"));
+            blocks.push(text_block(250.0, y, "Right column text here"));
+        }
+        assert!(detect_gutter(&blocks).is_some());
+    }
+
+    #[test]
+    fn test_segment_page_emits_full_width_region_before_two_column_band() {
+        let mut blocks = vec![text_block(
+            0.0,
+            600.0,
+            "A full width line of body text spanning the page",
+        )];
+        for row in 0..3 {
+            let y = 580.0 - row as f32 * 20.0;
+            blocks.push(text_block(0.0, y, "Left column text here"));
+            blocks.push(text_block(250.0, y, "Right column text here"));
+        }
+        let regions = segment_page(&blocks, 235.0, 12.0);
+        assert_eq!(regions.len(), 2);
+        match &regions[0] {
+            Region::Full(indices) => assert_eq!(indices, &vec![0]),
+            other => panic!("expected full-width region first, got {other:?}"),
+        }
+        match &regions[1] {
+            Region::TwoCol { left, right } => {
+                assert_eq!(left.len(), 3);
+                assert_eq!(right.len(), 3);
+            }
+            other => panic!("expected two-column region second, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_two_column_page_does_not_become_table_and_preserves_reading_order() {
+        // This is the IEEE Access regression case: a two-column body that,
+        // before gutter detection, would satisfy `detect_table_regions`'s
+        // alignment gates (each visual "line" merges a left- and
+        // right-column line into two aligned cells) and get misrendered as
+        // a GFM table with scrambled reading order.
+        let mut blocks = Vec::new();
+        let left_lines = [
+            "Left line one",
+            "Left line two",
+            "Left line three",
+            "Left line four",
+        ];
+        let right_lines = [
+            "Right line one",
+            "Right line two",
+            "Right line three",
+            "Right line four",
+        ];
+        for (row, (l, r)) in left_lines.iter().zip(right_lines.iter()).enumerate() {
+            let y = 500.0 - row as f32 * 20.0;
+            blocks.push(text_block(0.0, y, l));
+            blocks.push(text_block(250.0, y, r));
+        }
+        let body_size = 12.0;
+        let gutter = detect_gutter(&blocks).expect("should detect two columns");
+        let h_rules: Vec<f32> = Vec::new();
+        let mut out = String::new();
+        for region in segment_page(&blocks, gutter, body_size) {
+            match region {
+                Region::Full(indices) => {
+                    out.push_str(&render_region(&blocks, &indices, body_size, &h_rules));
+                }
+                Region::TwoCol { left, right } => {
+                    out.push_str(&render_region(&blocks, &left, body_size, &h_rules));
+                    out.push_str(&render_region(&blocks, &right, body_size, &h_rules));
+                }
+            }
+        }
+
+        assert!(
+            !out.contains("| --- |"),
+            "two-column prose should not become a table:\n{out}"
+        );
+        let left_pos = out.find("Left line one").expect("left column text missing");
+        let right_pos = out
+            .find("Right line one")
+            .expect("right column text missing");
+        assert!(
+            left_pos < right_pos,
+            "left column should be fully emitted before right column:\n{out}"
         );
     }
 }
