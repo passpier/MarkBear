@@ -489,3 +489,107 @@
     @apply p-2;
   }
 }
+
+/* Footnotes (see src/extensions/footnotes.ts) */
+.tiptap sup.footnote-ref {
+  font-size: 0.75em;
+  font-weight: 600;
+  padding: 0 0.2em;
+  border-radius: 0.2em;
+  cursor: pointer;
+  color: hsl(var(--link-color));
+  background-color: hsl(var(--bg-inline-code));
+}
+
+.tiptap sup.footnote-ref:hover {
+  color: hsl(var(--link-hover));
+}
+
+.tiptap div.footnotes {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid hsl(var(--border-color));
+  font-size: 0.9em;
+  color: hsl(var(--text-muted));
+}
+
+.tiptap div.footnote-item {
+  display: flex;
+  gap: 0.4em;
+  margin-bottom: 0.4em;
+}
+
+.tiptap div.footnote-item .footnote-label {
+  flex: none;
+  font-weight: 600;
+  color: hsl(var(--text-muted));
+}
+
+.tiptap div.footnote-item .footnote-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.tiptap div.footnote-item .footnote-backref {
+  margin-left: 0.4em;
+  color: hsl(var(--link-color));
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.tiptap div.footnote-item .footnote-backref:hover {
+  color: hsl(var(--link-hover));
+}
+
+/* Raw HTML blocks (see src/extensions/rawHtml.ts, HtmlBlockNodeView.tsx) */
+.tiptap .html-block {
+  margin: 1rem 0;
+}
+
+.tiptap .html-block dl {
+  margin: 0;
+}
+
+.tiptap .html-block dt {
+  font-weight: 600;
+  color: hsl(var(--text-heading));
+}
+
+.tiptap .html-block dd {
+  margin: 0 0 0.75rem 1.5rem;
+  color: hsl(var(--text-primary));
+}
+
+.tiptap .html-block details {
+  border: 1px solid hsl(var(--border-color));
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.tiptap .html-block summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Curated inline HTML marks (see src/extensions/rawHtml.ts) */
+.tiptap kbd {
+  font-family: var(--font-code);
+  font-size: 0.85em;
+  padding: 0.1em 0.4em;
+  border-radius: 0.25em;
+  border: 1px solid hsl(var(--border-color));
+  border-bottom-width: 2px;
+  background-color: hsl(var(--bg-inline-code));
+}
+
+.tiptap mark {
+  background-color: hsl(var(--checkbox-checked) / 0.35);
+  color: inherit;
+  border-radius: 0.15em;
+  padding: 0 0.1em;
+}
+
+.tiptap abbr {
+  text-decoration: underline dotted;
+  cursor: help;
+}

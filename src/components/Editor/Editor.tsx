@@ -1,19 +1,9 @@
 import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import { Markdown } from 'tiptap-markdown';
-import Typography from '@tiptap/extension-typography';
 import Image from '@tiptap/extension-image';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import type { MarkdownSerializerState } from '@tiptap/pm/markdown';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import Table from '@tiptap/extension-table';
-import TableRow from '@tiptap/extension-table-row';
-import TableHeader from '@tiptap/extension-table-header';
-import TableCell from '@tiptap/extension-table-cell';
-import Link from '@tiptap/extension-link';
-import TaskList from '@tiptap/extension-task-list';
-import TaskItem from '@tiptap/extension-task-item';
 import { createLowlight, common } from 'lowlight';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -23,8 +13,11 @@ import { useEditorLayout } from '@/hooks/useEditorLayout';
 import { debounce } from '@/lib/utils';
 import { injectFrontmatterAsCodeBlock, restoreFrontmatterFromCodeBlock, frontmatterLength } from '@/lib/frontmatterUtils';
 import { computeSegmentAnchor, resolveSegmentScrollTop, findAnchorHeading, type HeadingLandmark } from '@/lib/editorAnchor';
+import { createMarkdownExtensions } from '@/lib/markdownExtensions';
+import { HtmlBlock } from '@/extensions/rawHtml';
 import '@/components/CodeBlockRenderer/CodeBlockRenderer.css';
 import { CodeBlockNodeView } from './CodeBlockNodeView';
+import { HtmlBlockNodeView } from './HtmlBlockNodeView';
 import { SearchExtension, type SearchStorage } from './searchExtension';
 import { FindBar } from './FindBar';
 import { TableHoverPanel } from './TableHoverPanel';
@@ -75,6 +68,18 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
     return CodeBlockLowlight.extend({
       addNodeView() {
         return ReactNodeViewRenderer(CodeBlockNodeView);
+      },
+    });
+  }, []);
+
+  // The base `HtmlBlock` extension (see `src/extensions/rawHtml.ts`) is
+  // shared with headless tests and stays React-free; only the live editor
+  // needs the sanitized node view, so it's grafted on here — same pattern as
+  // `MermaidCodeBlock` above.
+  const HtmlBlockWithView = useMemo(() => {
+    return HtmlBlock.extend({
+      addNodeView() {
+        return ReactNodeViewRenderer(HtmlBlockNodeView);
       },
     });
   }, []);
@@ -135,56 +140,13 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({
-        heading: {
-          levels: [1, 2, 3, 4, 5, 6],
-        },
-        codeBlock: false, // Disable default code block to use lowlight
-      }),
+      ...createMarkdownExtensions({ htmlBlock: HtmlBlockWithView }),
       MermaidCodeBlock.configure({
         lowlight,
         defaultLanguage: null, // Null lets Tiptap detect language from markdown info string
         languageClassPrefix: 'language-', // Matches hljs class format: language-javascript, language-python, etc.
       }),
-      Markdown.configure({
-        html: true,
-        transformPastedText: true,
-        transformCopiedText: true,
-        // Match Typora/GFM: a single newline within a paragraph renders as a
-        // visible line break rather than being collapsed into the same line.
-        // Round-trip note: this makes soft breaks serialize back out as a
-        // trailing backslash + newline (tiptap-markdown's hardBreak
-        // serializer) — a deliberate, accepted normalization.
-        breaks: true,
-        // Auto-detect bare URLs (e.g. `http://www.example.com`) as links at
-        // parse time, matching GFM/Typora behavior.
-        linkify: true,
-      }),
-      Typography,
       CustomImage,
-      Table.configure({
-        resizable: true,
-        handleWidth: 4,
-        cellMinWidth: 50,
-        lastColumnResizable: true,
-        allowTableNodeSelection: false,
-      }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      // openOnClick disabled: a click inside the Tauri webview would navigate
-      // the app window itself away from the editor rather than opening an
-      // external browser. Revisit if/when links open via the OS browser
-      // (e.g. through @tauri-apps/plugin-shell).
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-        linkOnPaste: true,
-      }),
-      TaskList,
-      TaskItem.configure({
-        nested: true,
-      }),
       SearchExtension,
     ],
     content: document?.content || '',
