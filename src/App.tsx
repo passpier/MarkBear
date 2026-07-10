@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { WindowTitlebar } from 'tauri-controls';
 import { Editor } from '@/components/Editor/Editor';
 import { SourceEditor } from '@/components/Editor/SourceEditor';
@@ -53,6 +54,7 @@ function App() {
     message?: string;
   } | null>(null);
   const [pendingClose, setPendingClose] = useState<{ id: string } | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Initialize platform detection early (before first render ideally)
   usePlatformInitialization();
@@ -186,7 +188,6 @@ function App() {
     };
   }, [loadDocument]);
 
-
   const getDocumentTitle = () => {
     if (!activeDocument) return t('common.markdown_editor');
 
@@ -227,29 +228,10 @@ function App() {
     }
   }, [documents.length, activeDocumentId, createNewDocument]);
 
-  const handleImport = useCallback(async (format: string) => {
-    const extensionMap: Record<string, string[]> = {
-      docx: ['docx'],
-      xlsx: ['xlsx', 'xls', 'ods'],
-      pdf: ['pdf'],
-      pptx: ['pptx', 'ppt'],
-    };
-    const filterName: Record<string, string> = {
-      docx: 'Word Document',
-      xlsx: 'Spreadsheet',
-      pdf: 'PDF Document',
-      pptx: 'PowerPoint Presentation',
-    };
-
+  // Runs an import for a known file path (shared by the file-dialog flow in
+  // `handleImport` and by dropped-file handling in `handleDroppedPaths`).
+  const runImport = useCallback(async (filePath: string, format: string) => {
     try {
-      const selected = await open({
-        multiple: false,
-        filters: [{ name: filterName[format] ?? format.toUpperCase(), extensions: extensionMap[format] ?? [format] }],
-      });
-
-      const filePath = Array.isArray(selected) ? selected[0] : selected;
-      if (!filePath || typeof filePath !== 'string') return;
-
       setImportExportStatus({ type: 'import', format, state: 'loading' });
 
       const result = await invoke<{ markdown: string; media_dir: string }>(
@@ -283,6 +265,103 @@ function App() {
       setTimeout(() => setImportExportStatus(null), 6000);
     }
   }, []);
+
+  const handleImport = useCallback(async (format: string) => {
+    const extensionMap: Record<string, string[]> = {
+      docx: ['docx'],
+      xlsx: ['xlsx', 'xls', 'ods'],
+      pdf: ['pdf'],
+      pptx: ['pptx', 'ppt'],
+    };
+    const filterName: Record<string, string> = {
+      docx: 'Word Document',
+      xlsx: 'Spreadsheet',
+      pdf: 'PDF Document',
+      pptx: 'PowerPoint Presentation',
+    };
+
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: filterName[format] ?? format.toUpperCase(), extensions: extensionMap[format] ?? [format] }],
+    });
+
+    const filePath = Array.isArray(selected) ? selected[0] : selected;
+    if (!filePath || typeof filePath !== 'string') return;
+
+    await runImport(filePath, format);
+  }, [runImport]);
+
+  // Maps a dropped file's extension to the import format used by
+  // `import_document`, mirroring `handleImport`'s extensionMap groups.
+  const importFormatForExtension = (ext: string): string | null => {
+    if (ext === 'docx') return 'docx';
+    if (ext === 'xlsx' || ext === 'xls' || ext === 'ods') return 'xlsx';
+    if (ext === 'pdf') return 'pdf';
+    if (ext === 'pptx' || ext === 'ppt') return 'pptx';
+    return null;
+  };
+
+  // Opens/imports files dropped onto the window. Markdown opens directly
+  // (loadDocument already dedups by path via openDocument); other supported
+  // formats route through the same importer the menu uses; anything else is
+  // silently ignored.
+  const handleDroppedPaths = useCallback(async (paths: string[]) => {
+    for (const path of paths) {
+      const ext = path.split('.').pop()?.toLowerCase() ?? '';
+      try {
+        if (ext === 'md' || ext === 'markdown') {
+          await loadDocument(path);
+        } else {
+          const format = importFormatForExtension(ext);
+          if (format) {
+            await runImport(path, format);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to open dropped file:', path, error);
+      }
+    }
+  }, [loadDocument, runImport]);
+
+  // Listen for files dropped onto the window. Tauri's native drag-drop is on
+  // by default (no `dragDropEnabled: false` in tauri.conf.json), so the OS
+  // already delivers these events — this just wires them up to open/import
+  // the dropped file(s), and shows a lightweight drop-target overlay.
+  useEffect(() => {
+    let isActive = true;
+    let unlisten: (() => void) | undefined;
+
+    const setupDragDrop = async () => {
+      try {
+        const stop = await getCurrentWebview().onDragDropEvent((event) => {
+          const { type } = event.payload;
+          if (type === 'enter' || type === 'over') {
+            setIsDragOver(true);
+          } else if (type === 'leave') {
+            setIsDragOver(false);
+          } else if (type === 'drop') {
+            setIsDragOver(false);
+            void handleDroppedPaths(event.payload.paths);
+          }
+        });
+
+        if (!isActive) {
+          stop();
+          return;
+        }
+        unlisten = stop;
+      } catch (error) {
+        console.warn('Failed to setup drag-drop handling:', error);
+      }
+    };
+
+    void setupDragDrop();
+
+    return () => {
+      isActive = false;
+      unlisten?.();
+    };
+  }, [handleDroppedPaths]);
 
   const handleExport = useCallback(async (format: string) => {
     const doc = useDocumentStore.getState().documents.find(
@@ -623,6 +702,11 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col">
+      {isDragOver && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center border-4 border-dashed border-primary bg-background/80 backdrop-blur-sm">
+          <span className="text-lg font-medium text-foreground">{t('dragDrop.overlay')}</span>
+        </div>
+      )}
       <WindowTitlebar
           className={`${titlebarClassName}`}
           controlsOrder="system"

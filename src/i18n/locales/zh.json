@@ -9,6 +9,9 @@
     "markdown_editor": "Pourdown",
     "char_count": "{{n}} 字元"
   },
+  "dragDrop": {
+    "overlay": "放開以開啟檔案"
+  },
   "sidebar": {
     "open_folder": "開啟資料夾",
     "new_file": "新檔案",

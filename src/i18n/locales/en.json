@@ -9,6 +9,9 @@
     "markdown_editor": "Pourdown",
     "char_count": "{{n}} chars"
   },
+  "dragDrop": {
+    "overlay": "Drop to open"
+  },
   "sidebar": {
     "open_folder": "Open Folder",
     "new_file": "New File",
