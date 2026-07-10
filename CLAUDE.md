@@ -52,18 +52,40 @@ in `Editor.tsx`, which resolves the document's `assetDir` via `convertFileSrc`.
 - xlsx import is capped at 500 rows per sheet; embedded images can't be
   mapped to a specific sheet/cell (best-effort "Embedded Images" section).
 - PDF import infers layout, not an exact reconstruction; image placement is
-  approximate for complex/multi-column layouts. Tables are detected via
-  conservative geometry clustering (`detect_table_regions` in
-  `convert/pdf.rs`, requires ≥2 aligned columns across ≥3 consecutive rows)
-  and rendered as GFM tables, with wrapped cells merged back via `<br>`; a
-  cell whose wrapped content is itself a bulleted/indented list falls outside
-  the alignment tolerance and drops that row back to prose instead of
-  corrupting the table — a deliberate conservative trade-off, not a bug.
-  Dot-leader lines (Table of Contents entries, e.g. `Introduction .... 5`)
-  are explicitly excluded from table detection (`row_has_dot_leader` in
-  `convert/pdf.rs`) and instead rendered as a flat bulleted list with the
-  leader collapsed to `…`, since they otherwise satisfy the column-alignment
-  gates but aren't tabular data.
+  approximate for complex layouts. Tables are detected via conservative
+  geometry clustering (`detect_table_regions` in `convert/pdf.rs`, requires
+  ≥2 aligned columns across ≥3 consecutive rows) and rendered as GFM tables,
+  with wrapped cells merged back via `<br>`; a cell whose wrapped content is
+  itself a bulleted/indented list falls outside the alignment tolerance and
+  drops that row back to prose instead of corrupting the table — a
+  deliberate conservative trade-off, not a bug. Dot-leader lines (Table of
+  Contents entries, e.g. `Introduction .... 5`) are explicitly excluded from
+  table detection (`row_has_dot_leader` in `convert/pdf.rs`) and instead
+  rendered as a flat bulleted list with the leader collapsed to `…`, since
+  they otherwise satisfy the column-alignment gates but aren't tabular data.
+- Standard two-column journal layouts (e.g. IEEE Access) are detected
+  (`detect_gutter` in `convert/pdf.rs`, requires ≥4 lines with independent
+  left/right content — same "repeated structural evidence" gate as table
+  detection, so an incidentally-spaced title line doesn't false-positive)
+  and read column-by-column via `segment_page`/`render_region`, instead of
+  being misread as false 2-cell tables. Body lines are reflowed into
+  paragraphs with hyphen-aware de-hyphenation (`append_wrapped`) — only
+  when the PDF's text stream has a literal hyphen glyph at the wrap point;
+  some PDFs wrap without one, leaving a raw space (e.g. "bet ter"), which
+  isn't fixable from the extracted text alone. 3+ column layouts, irregular
+  column widths, and rotated text aren't handled (fall back to
+  single-column reading order). Repeated running headers/footers (page
+  numbers, author/title strips) are stripped: `detect_running_headers_footers`
+  in `convert/pdf.rs` scans each page's top/bottom margin band
+  (`HF_BAND_FRACTION`), normalizes digit runs to `#` so incrementing page
+  numbers compare equal (`normalize_hf`), and flags any band line recurring
+  on ≥`HF_MIN_PAGES` (3) distinct pages — the same "repeated structural
+  evidence" gate used for table/gutter detection — before any page is
+  rendered, so a page number fused into body text (e.g. "…components. 18913")
+  is removed too, not just standalone header/footer lines. A header/footer
+  recurring on fewer than 3 pages, or one whose text is fused with unique
+  per-page content (e.g. a page-1 footer merged into a copyright notice), is
+  conservatively left in place.
 - Vector image formats (EMF/WMF, common in Office exports) can't be rendered
   by the webview — replaced with an `*(unsupported image)*` note.
 - pptx animations are dropped (not representable in Markdown).

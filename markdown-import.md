@@ -97,6 +97,18 @@ standardized read/print, respectively).
 
 - Text is extracted per page as positioned blocks (x/y coordinates + font
   size), not as a raw text stream.
+- Repeated running headers/footers (author/title strips, page numbers) are
+  detected and stripped before any page is rendered:
+  `detect_running_headers_footers` scans every page's top/bottom margin band,
+  normalizes digit runs to `#` so incrementing page numbers compare equal
+  (`normalize_hf`), and flags any band line recurring on at least 3 distinct
+  pages — the same "require repeated structural evidence" gate used for table
+  and gutter detection. Because this runs on the raw text blocks, it also
+  catches a page number fused into body text by reading-order reconstruction
+  (e.g. "...components. 18913"), not just a standalone header/footer line.
+  A header/footer that recurs on fewer than 3 pages, or is fused with unique
+  per-page text (e.g. a page-1 footer merged into a copyright notice), is
+  conservatively left in place.
 - Standard two-column layouts (IEEE Access and similar journals) are
   detected before reading order is reconstructed: `detect_gutter` looks for a
   vertical strip repeatedly uncrossed by text across several lines (mirroring
@@ -175,8 +187,9 @@ rather than a broken image link.
   specifically; three-or-more-column layouts, mixed/irregular column widths,
   and rotated text aren't handled and fall back to single-column reading
   order. Repeated running headers/footers (page numbers, author/title
-  strips) aren't stripped — they appear inline as short full-width lines
-  wherever they fall in reading order.
+  strips) are stripped when they recur on at least 3 pages in a page's
+  margin band; one that appears fewer times, or is fused with unique
+  per-page text, is left inline.
 - docx, pptx, and PDF images in vector formats (EMF/WMF) can't be rendered by
   the webview and are replaced with a text note.
 - pptx animations are dropped (not representable in Markdown).

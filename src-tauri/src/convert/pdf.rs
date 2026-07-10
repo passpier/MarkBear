@@ -1,5 +1,6 @@
 use markdown2pdf::config::ConfigSource;
 use pdfium_render::prelude::*;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -45,9 +46,26 @@ pub fn pdf_to_markdown(path: &str, media: &mut MediaSink) -> Result<String, Conv
         .load_pdf_from_file(path, None)
         .map_err(|e| ConversionError(format!("Failed to open PDF: {}", e)))?;
 
-    let mut md = String::from(PDF_IMPORT_NOTICE);
+    // Pass 1: extract every page's blocks up front, with no rendering yet, so
+    // running headers/footers can be detected by looking across all pages
+    // before any single page is rendered.
+    let mut pages: Vec<PageContent> = Vec::new();
     for (page_index, page) in doc.pages().iter().enumerate() {
-        md.push_str(&extract_page_markdown(&page, page_index, media)?);
+        pages.push(PageContent {
+            blocks: extract_page_blocks(&page, page_index, media)?,
+            h_rules: collect_horizontal_rules(&page),
+            height: page.height().value,
+        });
+    }
+
+    let hf_keys = detect_running_headers_footers(&pages);
+
+    // Pass 2: render each page, dropping any blocks identified as a repeated
+    // running header/footer.
+    let mut md = String::from(PDF_IMPORT_NOTICE);
+    for page in &pages {
+        let kept = filter_header_footer_blocks(&page.blocks, page.height, &hf_keys);
+        md.push_str(&render_page_blocks(&kept, &page.h_rules));
         md.push('\n');
     }
 
@@ -149,6 +167,7 @@ fn is_all_caps_heading(text: &str) -> bool {
     alpha_count > 0
 }
 
+#[derive(Clone)]
 struct TextBlock {
     x: f32,
     /// Right edge of the block's bounding box, in the same page-space units
@@ -777,11 +796,177 @@ fn segment_page(blocks: &[TextBlock], gutter: f32, body_size: f32) -> Vec<Region
     regions
 }
 
-fn extract_page_markdown(
+/// Fraction of page height, at both the top and bottom, treated as the
+/// "band" scanned for repeated running headers/footers. Deliberately
+/// generous — the band alone doesn't decide removal, it only defines the
+/// candidate pool; the real guard against stripping body text is the
+/// cross-page repeat requirement in [`detect_running_headers_footers`].
+const HF_BAND_FRACTION: f32 = 0.12;
+
+/// Minimum number of distinct pages a band line must recur on (with the same
+/// normalized text, see [`normalize_hf`]) before it's treated as a running
+/// header/footer. Mirrors the "require repeated structural evidence" gate
+/// used elsewhere in this file (`MIN_CORE_ROWS`, `MIN_TWO_COLUMN_LINES`) so a
+/// one-off heading or title that happens to sit in the margin band isn't
+/// removed.
+const HF_MIN_PAGES: usize = 3;
+
+/// Normalizes a candidate header/footer line for cross-page comparison: runs
+/// of digits collapse to a single `#` (so incrementing page numbers like
+/// "18913"/"18914" compare equal), whitespace collapses to single spaces,
+/// and case is folded. Non-digit, non-whitespace text (the running title,
+/// author strip, "VOLUME 13, 2025", etc.) is otherwise left intact.
+fn normalize_hf(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut prev_was_digit = false;
+    for c in text.trim().chars() {
+        if c.is_ascii_digit() {
+            if !prev_was_digit {
+                out.push('#');
+            }
+            prev_was_digit = true;
+        } else {
+            out.push(c.to_ascii_lowercase());
+            prev_was_digit = false;
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Groups the non-image blocks lying in the top or bottom `HF_BAND_FRACTION`
+/// of a page of the given `height` into visual lines (by y-proximity, same
+/// idiom as `render_region`), and returns each line's normalized text
+/// alongside the indices (into `blocks`) of the blocks that make it up. This
+/// is the shared unit used by both cross-page detection and per-page
+/// filtering, so the two always agree on what counts as a "band line".
+fn band_lines(blocks: &[TextBlock], height: f32) -> Vec<(String, Vec<usize>)> {
+    if height <= 0.0 {
+        return Vec::new();
+    }
+    let top_thresh = height * (1.0 - HF_BAND_FRACTION);
+    let bottom_thresh = height * HF_BAND_FRACTION;
+
+    let mut candidates: Vec<usize> = (0..blocks.len())
+        .filter(|&i| {
+            let b = &blocks[i];
+            !b.is_image && !b.text.trim().is_empty() && (b.y >= top_thresh || b.y <= bottom_thresh)
+        })
+        .collect();
+    if candidates.is_empty() {
+        return Vec::new();
+    }
+    candidates.sort_by(|&a, &b| {
+        blocks[b]
+            .y
+            .partial_cmp(&blocks[a].y)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Body font size is unknown at this point (this runs before the
+    // page-wide median is computed), so fall back to each line's own leading
+    // block's font size for the grouping threshold — good enough to keep a
+    // single header/footer run together.
+    let mut lines: Vec<Vec<usize>> = Vec::new();
+    for &i in &candidates {
+        if let Some(last) = lines.last_mut() {
+            let thresh = blocks[last[0]].font_size.max(1.0) * 0.6;
+            if (blocks[last[0]].y - blocks[i].y).abs() <= thresh {
+                last.push(i);
+                continue;
+            }
+        }
+        lines.push(vec![i]);
+    }
+
+    lines
+        .into_iter()
+        .map(|mut idxs| {
+            idxs.sort_by(|&a, &b| {
+                blocks[a]
+                    .x
+                    .partial_cmp(&blocks[b].x)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            let text = idxs
+                .iter()
+                .map(|&i| blocks[i].text.trim())
+                .collect::<Vec<_>>()
+                .join(" ");
+            (normalize_hf(&text), idxs)
+        })
+        .collect()
+}
+
+/// Scans every page's margin bands and returns the normalized text of every
+/// line that recurs on at least `HF_MIN_PAGES` distinct pages — the running
+/// headers/footers to strip. Each page contributes its band lines as a
+/// *set* (deduped) before tallying, so a line repeated multiple times within
+/// a single page can't satisfy the cross-page threshold on its own.
+fn detect_running_headers_footers(pages: &[PageContent]) -> HashSet<String> {
+    let mut page_counts: HashMap<String, usize> = HashMap::new();
+    for page in pages {
+        let mut seen_this_page: HashSet<String> = HashSet::new();
+        for (text, _) in band_lines(&page.blocks, page.height) {
+            if !text.is_empty() {
+                seen_this_page.insert(text);
+            }
+        }
+        for text in seen_this_page {
+            *page_counts.entry(text).or_insert(0) += 1;
+        }
+    }
+    page_counts
+        .into_iter()
+        .filter(|&(_, count)| count >= HF_MIN_PAGES)
+        .map(|(text, _)| text)
+        .collect()
+}
+
+/// Returns `blocks` with any block belonging to a margin-band line whose
+/// normalized text is in `hf_keys` removed. A no-op (returns a full copy)
+/// when `hf_keys` is empty, e.g. for a short document below `HF_MIN_PAGES`
+/// or a PDF with no repeated running headers/footers at all.
+fn filter_header_footer_blocks(
+    blocks: &[TextBlock],
+    height: f32,
+    hf_keys: &HashSet<String>,
+) -> Vec<TextBlock> {
+    if hf_keys.is_empty() {
+        return blocks.to_vec();
+    }
+    let mut drop: HashSet<usize> = HashSet::new();
+    for (text, idxs) in band_lines(blocks, height) {
+        if hf_keys.contains(&text) {
+            drop.extend(idxs);
+        }
+    }
+    blocks
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !drop.contains(i))
+        .map(|(_, b)| b.clone())
+        .collect()
+}
+
+/// One page's extracted content, collected up front (Pass 1) so that
+/// [`detect_running_headers_footers`] can look across all pages before any
+/// page is rendered.
+struct PageContent {
+    blocks: Vec<TextBlock>,
+    h_rules: Vec<f32>,
+    /// Page height in PDF points, used to define the top/bottom margin bands
+    /// scanned for repeated running headers/footers.
+    height: f32,
+}
+
+/// Extracts one page's positioned text/image blocks (no layout analysis or
+/// rendering yet). Runs once per page in Pass 1, before cross-page
+/// header/footer detection.
+fn extract_page_blocks(
     page: &PdfPage,
     page_index: usize,
     media: &mut MediaSink,
-) -> Result<String, ConversionError> {
+) -> Result<Vec<TextBlock>, ConversionError> {
     let mut blocks: Vec<TextBlock> = Vec::new();
     let mut image_index = 0usize;
 
@@ -847,8 +1032,15 @@ fn extract_page_markdown(
         }
     }
 
+    Ok(blocks)
+}
+
+/// Renders one page's already-extracted (and header/footer-filtered) blocks
+/// as Markdown. Runs once per page in Pass 2, after
+/// [`detect_running_headers_footers`] has decided what to filter out.
+fn render_page_blocks(blocks: &[TextBlock], h_rules: &[f32]) -> String {
     if blocks.is_empty() {
-        return Ok(String::new());
+        return String::new();
     }
 
     // Determine body (median) font size for relative heading detection
@@ -856,14 +1048,13 @@ fn extract_page_markdown(
     sizes.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let body_size = sizes[sizes.len() / 2];
     if body_size <= 0.0 {
-        return Ok(blocks
+        return blocks
             .iter()
             .map(|b| b.text.trim().to_string())
             .collect::<Vec<_>>()
-            .join(" "));
+            .join(" ");
     }
 
-    let h_rules = collect_horizontal_rules(page);
     let all_indices: Vec<usize> = (0..blocks.len()).collect();
 
     // Two-column journal layouts (IEEE Access and similar) put a left- and
@@ -874,26 +1065,24 @@ fn extract_page_markdown(
     // no gutter found means the existing single-region path runs unchanged;
     // a detected gutter splits the page into full-width dividers and
     // two-column bands, each rendered as its own region.
-    let out = match detect_gutter(&blocks) {
-        None => render_region(&blocks, &all_indices, body_size, &h_rules),
+    match detect_gutter(blocks) {
+        None => render_region(blocks, &all_indices, body_size, h_rules),
         Some(gutter) => {
             let mut out = String::new();
-            for region in segment_page(&blocks, gutter, body_size) {
+            for region in segment_page(blocks, gutter, body_size) {
                 match region {
                     Region::Full(indices) => {
-                        out.push_str(&render_region(&blocks, &indices, body_size, &h_rules));
+                        out.push_str(&render_region(blocks, &indices, body_size, h_rules));
                     }
                     Region::TwoCol { left, right } => {
-                        out.push_str(&render_region(&blocks, &left, body_size, &h_rules));
-                        out.push_str(&render_region(&blocks, &right, body_size, &h_rules));
+                        out.push_str(&render_region(blocks, &left, body_size, h_rules));
+                        out.push_str(&render_region(blocks, &right, body_size, h_rules));
                     }
                 }
             }
             out
         }
-    };
-
-    Ok(out)
+    }
 }
 
 /// Renders one reading-order region of a page as Markdown — either the
@@ -1476,4 +1665,91 @@ mod tests {
             "left column should be fully emitted before right column:\n{out}"
         );
     }
+
+    #[test]
+    fn test_normalize_hf_collapses_digit_runs_and_case() {
+        assert_eq!(normalize_hf("18913"), "#");
+        assert_eq!(normalize_hf("VOLUME 13, 2025"), "volume #, #");
+        assert_eq!(
+            normalize_hf("  D.  B. Acharya  et al. "),
+            "d. b. acharya et al."
+        );
+        // Two separate digit runs on one line each collapse to their own '#'.
+        assert_eq!(normalize_hf("page 4 of 20"), "page # of #");
+    }
+
+    /// Builds a `PageContent` with a running header near the top of the page
+    /// (y=780, within the top band for height=800) and a page-number-style
+    /// footer near the bottom (y=20, within the bottom band), plus one line
+    /// of ordinary body text in the middle (y=400, outside both bands).
+    fn page_with_header_footer(header: &str, footer: &str, body: &str) -> PageContent {
+        PageContent {
+            blocks: vec![
+                text_block(50.0, 780.0, header),
+                text_block(50.0, 400.0, body),
+                text_block(50.0, 20.0, footer),
+            ],
+            h_rules: Vec::new(),
+            height: 800.0,
+        }
+    }
+
+    #[test]
+    fn test_detect_running_headers_footers_finds_band_repeats_across_pages() {
+        let pages = vec![
+            page_with_header_footer("D. B. Acharya et al.: Survey", "18913", "Body text one"),
+            page_with_header_footer("D. B. Acharya et al.: Survey", "18914", "Body text two"),
+            page_with_header_footer("D. B. Acharya et al.: Survey", "18915", "Body text three"),
+            page_with_header_footer("D. B. Acharya et al.: Survey", "18916", "Body text four"),
+        ];
+        let keys = detect_running_headers_footers(&pages);
+
+        assert!(
+            keys.contains(&normalize_hf("D. B. Acharya et al.: Survey")),
+            "expected running header to be detected: {keys:?}"
+        );
+        assert!(
+            keys.contains(&normalize_hf("18913")),
+            "expected digit-normalized page number to be detected: {keys:?}"
+        );
+        // Body-position text never enters the band, so it must not be
+        // treated as a running header/footer even though it "recurs" (each
+        // page's body text is distinct here, but the position check alone
+        // should already exclude it).
+        assert!(!keys.contains(&normalize_hf("Body text one")));
+    }
+
+    #[test]
+    fn test_detect_running_headers_footers_requires_min_pages() {
+        // Only 2 pages share the header text — below HF_MIN_PAGES (3).
+        let pages = vec![
+            page_with_header_footer("Rare Header", "1", "Body A"),
+            page_with_header_footer("Rare Header", "2", "Body B"),
+        ];
+        let keys = detect_running_headers_footers(&pages);
+        assert!(
+            !keys.contains(&normalize_hf("Rare Header")),
+            "a header repeated on fewer than HF_MIN_PAGES pages should not be flagged"
+        );
+    }
+
+    #[test]
+    fn test_filter_header_footer_blocks_removes_only_flagged_lines() {
+        let page = page_with_header_footer("D. B. Acharya et al.: Survey", "18913", "Body text");
+        let mut hf_keys = HashSet::new();
+        hf_keys.insert(normalize_hf("D. B. Acharya et al.: Survey"));
+        hf_keys.insert(normalize_hf("18913"));
+
+        let kept = filter_header_footer_blocks(&page.blocks, page.height, &hf_keys);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].text, "Body text");
+    }
+
+    #[test]
+    fn test_filter_header_footer_blocks_noop_when_no_keys() {
+        let page = page_with_header_footer("D. B. Acharya et al.: Survey", "18913", "Body text");
+        let kept = filter_header_footer_blocks(&page.blocks, page.height, &HashSet::new());
+        assert_eq!(kept.len(), page.blocks.len());
+    }
+
 }
