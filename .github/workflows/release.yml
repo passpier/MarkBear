@@ -85,7 +85,6 @@ jobs:
             - PDF import handles text-based PDFs only — no scanned/OCR; complex multi-column layouts may reorder.
             - Spreadsheet import is capped at 500 rows/sheet; images can't be mapped to a specific cell.
             - Vector images (EMF/WMF) can't be displayed; pptx animations are dropped.
-            - **Builds are unsigned / un-notarized.** On macOS you must remove the quarantine flag (`xattr -dr com.apple.quarantine "/Applications/Pourdown.app"`); on Windows, SmartScreen may need a one-time "More info → Run anyway". See the README for step-by-step install instructions.
           releaseDraft: true
           prerelease: true
           args: ${{ matrix.args }}

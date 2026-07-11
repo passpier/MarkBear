@@ -52,24 +52,17 @@ export default defineConfig(async () => ({
     },
     rollupOptions: {
       output: {
-        manualChunks: {
-          // mermaid is already dynamically imported per-block; this gives it a stable chunk name
-          mermaid: ["mermaid"],
-          tiptap: [
-            "@tiptap/core",
-            "@tiptap/react",
-            "@tiptap/starter-kit",
-            "@tiptap/extension-image",
-            "@tiptap/extension-placeholder",
-            "@tiptap/extension-table",
-            "@tiptap/extension-table-cell",
-            "@tiptap/extension-table-header",
-            "@tiptap/extension-table-row",
-            "@tiptap/extension-typography",
-          ],
-          lowlight: ["lowlight", "@tiptap/extension-code-block-lowlight"],
-          i18n: ["i18next", "react-i18next"],
-        },
+        // No manualChunks: a prior grouping (mermaid/tiptap/lowlight/i18n
+        // into fixed chunks) produced a `ReferenceError: Cannot access
+        // uninitialized variable` at module-eval time in built bundles
+        // (both debug and release `tauri build`, never in `tauri dev` since
+        // the dev server doesn't bundle) — a classic manualChunks
+        // circular/init-order TDZ bug, most likely from splitting
+        // `react-i18next` away from the `react` chunk it depends on at
+        // eval time. Letting rollup auto-split by the import graph
+        // guarantees correct init order at the cost of slightly less
+        // predictable chunk names, which doesn't matter for a desktop app
+        // serving local assets.
       },
     },
   },
