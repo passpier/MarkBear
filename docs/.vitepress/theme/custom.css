@@ -444,10 +444,6 @@
 .pourdown-home .pd-cta-band {
   text-align: center;
 }
-.pourdown-home .pd-cta-band img {
-  border-radius: 14px;
-  margin-bottom: 22px;
-}
 .pourdown-home .pd-cta-band h2 {
   font-weight: 700;
   font-size: clamp(1.875rem, 4.6vw, 2.875rem);

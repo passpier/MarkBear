@@ -164,7 +164,6 @@ description: Desktop Markdown editor that converts Word, Excel, PDF, and PowerPo
 
 <section class="pd-section pd-section-alt">
   <div class="pd-container pd-cta-band">
-    <img src="/logo-64.webp" alt="Pourdown" width="56" height="56">
     <h2>Get Pourdown</h2>
     <p class="pd-section-sub">Convert your first document to clean Markdown in the next minute.</p>
     <div class="pd-dl-row">
