@@ -41,7 +41,7 @@ description: Desktop Markdown editor that converts Word, Excel, PDF, and PowerPo
       <div class="pd-demo-frame">
         <video class="pd-demo-video" controls preload="none" playsinline poster="/demo-poster.webp" width="1108" height="720">
           <source src="/demo.mp4" type="video/mp4">
-          <a href="/demo.mp4">Watch the import demo</a>
+          <a href="/Pourdown/demo.mp4">Watch the import demo</a>
         </video>
       </div>
       <p class="pd-demo-caption">See it in action — importing a PDF and getting editable Markdown back.</p>
@@ -81,7 +81,7 @@ description: Desktop Markdown editor that converts Word, Excel, PDF, and PowerPo
         <p>Slide titles become headings, body text becomes paragraphs, images extracted.</p>
       </div>
     </div>
-    <p class="pd-format-foot">Exactly what's kept and today's limitations are in the <a href="/guide/importing">Importing guide →</a></p>
+    <p class="pd-format-foot">Exactly what's kept and today's limitations are in the <a href="/Pourdown/guide/importing">Importing guide →</a></p>
   </div>
 </section>
 
@@ -91,7 +91,7 @@ description: Desktop Markdown editor that converts Word, Excel, PDF, and PowerPo
       <div class="pd-llm-inner">
         <div class="pd-llm-kicker">Made for prompting</div>
         <p class="pd-llm-title">Feed cleaner context to your LLM — for a fraction of the tokens.</p>
-        <p class="pd-llm-sub">Markdown is up to 96% more token-efficient than raw PDF when fed to a language model (<a href="/guide/importing">community benchmarks</a>). Convert once, prompt for less.</p>
+        <p class="pd-llm-sub">Markdown is up to 96% more token-efficient than raw PDF when fed to a language model (<a href="/Pourdown/guide/importing#why-markdown-import">community benchmarks</a>). Convert once, prompt for less.</p>
       </div>
     </div>
   </div>
