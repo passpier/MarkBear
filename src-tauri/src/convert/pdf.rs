@@ -1151,7 +1151,23 @@ fn extract_page_blocks(
                 Ok(m) => m,
                 Err(_) => continue,
             };
-            let font_size = text_obj.unscaled_font_size().value;
+            // `scaled_font_size`, not `unscaled_font_size`: some PDFs (seen
+            // in a two-column IEEE/OJAP-style journal export) bake the
+            // actual point size into the text object's transformation
+            // matrix rather than the font's own size parameter, so
+            // `unscaled_font_size` reports a uniform 1.0pt for every run
+            // regardless of its true rendered size. That collapses
+            // `body_size` (the median below) to 1.0 on every page, which
+            // cascades into every size-relative threshold in this file —
+            // most visibly `segment_page`'s gutter straddle margin
+            // (`body_size * 0.5`), which becomes sub-pixel and misreads
+            // ordinary column-edge line endings as full-width lines
+            // spanning the gutter, collapsing the whole two-column body
+            // into one region and letting `detect_table_regions` see the
+            // interleaved left/right lines as a 2-column table.
+            // `scaled_font_size` multiplies by the matrix's vertical scale,
+            // recovering the true rendered size in both cases.
+            let font_size = text_obj.scaled_font_size().value;
             let x = matrix.e();
             // Right edge of the run's bounding box, used for table-cell gap
             // detection. Falls back to `x` (a zero-width block) if pdfium
