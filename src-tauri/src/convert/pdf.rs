@@ -747,6 +747,11 @@ fn detect_gutter(blocks: &[TextBlock]) -> Option<f32> {
             let mut has_left = false;
             let mut has_right = false;
             let mut line_straddles = false;
+            // Tallied provisionally per line, then only folded into the
+            // page-wide left_count/right_count share below if this line
+            // turns out to be genuinely two-sided (see comment there).
+            let mut line_left = 0usize;
+            let mut line_right = 0usize;
             for &i in line {
                 let b = &blocks[i];
                 let w = gutter_weight(b);
@@ -758,14 +763,29 @@ fn detect_gutter(blocks: &[TextBlock]) -> Option<f32> {
                 }
                 if (b.x + b.x_end) / 2.0 < cand {
                     has_left = true;
-                    left_count += 1;
+                    line_left += 1;
                 } else {
                     has_right = true;
-                    right_count += 1;
+                    line_right += 1;
                 }
             }
             if has_left && has_right && !line_straddles {
                 two_sided_lines += 1;
+                // MIN_SIDE_SHARE only wants to catch "a handful of stray
+                // blocks on one side" being mistaken for a second column
+                // (see its doc comment) — so it must draw its left/right
+                // tally from confirmed two-sided lines only. Folding in
+                // one-sided lines (e.g. a run of lines where a figure
+                // occupies the left column's height while prose keeps
+                // flowing on the right — common on a figure-dense page like
+                // the "METASURFACE-BASED TRANSMITARRAYS" section of a real
+                // IEEE-style two-column PDF) dilutes the share with content
+                // that was never ambiguous about which side it's on, and can
+                // sink a genuinely two-column page's share below the
+                // threshold even though its two-sided-line evidence and
+                // coverage are both excellent.
+                left_count += line_left;
+                right_count += line_right;
             }
         }
 
@@ -1936,6 +1956,44 @@ mod tests {
         }
         let gutter = detect_gutter(&blocks);
         assert!(gutter.is_some(), "expected a gutter to be detected");
+        let g = gutter.unwrap();
+        assert!(
+            (100.0..250.0).contains(&g),
+            "gutter {g} not between the two columns"
+        );
+    }
+
+    #[test]
+    fn test_detect_gutter_not_diluted_by_one_sided_figure_lines() {
+        // Regression test for a real-world figure-dense two-column page (the
+        // "METASURFACE-BASED TRANSMITARRAYS" section of an IEEE-style
+        // journal PDF) that was misdetected as single-column: a run of
+        // figures/captions occupying the left column's height while prose
+        // kept flowing on the right produces many lines with content on the
+        // right only. Before the fix, MIN_SIDE_SHARE's left/right tally
+        // counted blocks from *every* line (including these one-sided
+        // ones), so the left share dropped below the 0.2 threshold even
+        // though the genuinely two-sided lines were perfectly balanced and
+        // full-coverage. The fix restricts the tally to confirmed two-sided
+        // lines only.
+        let mut blocks = Vec::new();
+        for row in 0..6 {
+            let y = 500.0 - row as f32 * 20.0;
+            blocks.push(text_block(0.0, y, "Left column text here"));
+            blocks.push(text_block(250.0, y, "Right column text here"));
+        }
+        // Simulates a figure spanning the left column's height while the
+        // right column's prose keeps going — no left-side text block at
+        // these line heights at all.
+        for row in 6..26 {
+            let y = 500.0 - row as f32 * 20.0;
+            blocks.push(text_block(250.0, y, "Right column text here"));
+        }
+        let gutter = detect_gutter(&blocks);
+        assert!(
+            gutter.is_some(),
+            "a figure-dense two-column page must not be diluted into a false single-column read"
+        );
         let g = gutter.unwrap();
         assert!(
             (100.0..250.0).contains(&g),
