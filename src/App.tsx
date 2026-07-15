@@ -719,7 +719,12 @@ function App() {
           windowControlsProps={{
             justify: true,
             platform: osPlatform ?? undefined,
-            hide: osPlatform === 'macos',
+            // Always hide the custom window buttons: on macOS the native
+            // title bar is already hidden (Overlay) so these were the only
+            // controls, but on Windows/Linux the OS keeps its native frame
+            // (decorations are on, needed for the native menu bar), so
+            // rendering these too duplicated the min/max/close buttons.
+            hide: true,
           }}
         >
           <div className="flex w-full items-center gap-2">
