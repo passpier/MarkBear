@@ -154,11 +154,7 @@ fn pdfium_lib_path() -> PathBuf {
 
 /// Builds a rich, user-readable failure report for a pdfium load error. Only
 /// runs on the error path (bind_to_library already failed), so it's free to
-/// stat every candidate — zero cost on the success path. Distinguishes
-/// "DLL not found" from "DLL found but failed to load" (a missing MSVC
-/// runtime dependency on Windows surfaces as the *same* error 126 text as a
-/// missing file, so the disambiguation has to come from Rust's own
-/// `.exists()` check, not from the raw error message).
+/// stat every candidate — zero cost on the success path.
 fn pdfium_load_diagnostics(attempted: &Path, err: &PdfiumError) -> String {
     let attempted_exists = attempted.exists();
     let raw = err.to_string();
@@ -180,17 +176,44 @@ fn pdfium_load_diagnostics(attempted: &Path, err: &PdfiumError) -> String {
         report.push_str(&format!("  - {:?} (exists: {})\n", c, c.exists()));
     }
     report.push_str(&format!("Raw error: {}\n", raw));
-
-    let hint = if !attempted_exists {
-        "Hint: the pdfium library was not found at the resolved path — this looks like a bundling/resource issue."
-    } else if raw.contains("193") || raw.to_lowercase().contains("not a valid win32 application") {
-        "Hint: the pdfium library exists but is the wrong architecture (e.g. an x64 DLL on ARM64, or vice versa)."
-    } else {
-        "Hint: the pdfium library exists but failed to load; a dependency is likely missing — install the Microsoft Visual C++ Redistributable (VCRUNTIME140.dll)."
-    };
-    report.push_str(hint);
+    report.push_str(diagnose_load_error_hint(&raw, attempted_exists));
 
     report
+}
+
+/// Picks the right one-line hint for a pdfium load failure. Split out from
+/// `pdfium_load_diagnostics` as a pure string->string helper so each branch
+/// is unit-testable without needing a real `PdfiumError` (which `pdfium`
+/// only constructs internally). Distinguishes:
+/// - a missing file (bundling/resource issue) — from our own `.exists()`
+///   check, not the raw error, since a missing-dependency load failure on
+///   Windows surfaces as the *same* generic loader text as a missing file;
+/// - wrong architecture (Windows error 193, "not a valid Win32 application");
+/// - a missing **symbol** (Windows `GetProcAddress`/error 127, or macOS
+///   `dlsym`'s "symbol not found") — the library loaded fine but doesn't
+///   export something this build's `pdfium-render` version requires, i.e.
+///   the bundled PDFium predates the crate's target version. This used to
+///   be misreported as a missing MSVC runtime (see below) because both
+///   failure modes go through the same generic Windows loader error path;
+///   only the symbol-lookup step's own error text tells them apart. See
+///   CLAUDE.md's PDFium gotcha entry and `scripts/fetch-pdfium.mjs` for the
+///   incident this distinction was added for;
+/// - anything else — a genuinely missing runtime dependency (Windows error
+///   126), where the VCRUNTIME140 hint still applies.
+fn diagnose_load_error_hint(raw: &str, attempted_exists: bool) -> &'static str {
+    let raw_lower = raw.to_lowercase();
+    if !attempted_exists {
+        "Hint: the pdfium library was not found at the resolved path — this looks like a bundling/resource issue."
+    } else if raw.contains("193") || raw_lower.contains("not a valid win32 application") {
+        "Hint: the pdfium library exists but is the wrong architecture (e.g. an x64 DLL on ARM64, or vice versa)."
+    } else if raw.contains("GetProcAddress")
+        || raw.contains("DlSym")
+        || raw_lower.contains("symbol not found")
+    {
+        "Hint: the pdfium library exists and loaded, but is missing a symbol this build requires — the bundled PDFium is an older build than the pdfium-render crate this app was compiled against expects. This is a packaging bug (a version mismatch between the bundled PDFium binary and the pdfium-render crate), not something fixable by reinstalling a runtime — please report it."
+    } else {
+        "Hint: the pdfium library exists but failed to load; a dependency is likely missing — install the Microsoft Visual C++ Redistributable (VCRUNTIME140.dll)."
+    }
 }
 
 /// True if `text` contains a run of at least 4 dots (a TOC "dot leader"),
@@ -1980,6 +2003,58 @@ mod tests {
         let resolved = PathBuf::from("/tmp/pourdown-test-resolved-pdfium.dll");
         set_pdfium_lib_path(resolved.clone());
         assert!(pdfium_candidate_paths().contains(&resolved));
+    }
+
+    #[test]
+    fn test_diagnose_load_error_hint_missing_file() {
+        // .exists() lies (per the caller's own check) take priority over the
+        // raw error text entirely — a missing file's raw error is generic.
+        let hint = diagnose_load_error_hint("anything", false);
+        assert!(hint.contains("bundling/resource issue"));
+    }
+
+    #[test]
+    fn test_diagnose_load_error_hint_wrong_architecture() {
+        let hint = diagnose_load_error_hint(
+            "LoadLibraryError(LoadLibraryExW { source: 193 })",
+            true,
+        );
+        assert!(hint.contains("wrong architecture"));
+    }
+
+    #[test]
+    fn test_diagnose_load_error_hint_missing_symbol_windows() {
+        // The real-world Windows text this regression is about: GetProcAddress
+        // failing with error 127 (ERROR_PROC_NOT_FOUND) — a missing *export*,
+        // not a missing dependency — must NOT get the VCRUNTIME140 hint.
+        let hint = diagnose_load_error_hint(
+            "LoadLibraryError(GetProcAddress { source: 127 })",
+            true,
+        );
+        assert!(hint.contains("bundled PDFium is an older build"));
+        assert!(!hint.contains("VCRUNTIME"));
+    }
+
+    #[test]
+    fn test_diagnose_load_error_hint_missing_symbol_macos() {
+        let hint = diagnose_load_error_hint(
+            "LoadLibraryError(DlSym { source: \"dlsym(0x7e32cae0, FPDFTextObj_SetFontSize): symbol not found\" })",
+            true,
+        );
+        assert!(hint.contains("bundled PDFium is an older build"));
+    }
+
+    #[test]
+    fn test_diagnose_load_error_hint_falls_back_to_missing_dependency() {
+        // A genuine missing-dependency load failure (e.g. Windows error 126,
+        // "the specified module could not be found") still gets the
+        // VCRUNTIME140 hint — this must stay reachable, not just the new
+        // missing-symbol branch.
+        let hint = diagnose_load_error_hint(
+            "LoadLibraryError(LoadLibraryExW { source: 126 })",
+            true,
+        );
+        assert!(hint.contains("VCRUNTIME140"));
     }
 
     /// End-to-end regression test against `tests/fixtures/sample.pdf`

@@ -24,9 +24,16 @@ changing it.
 git clone https://github.com/passpier/Pourdown.git
 cd Pourdown
 pnpm install
+node scripts/fetch-pdfium.mjs   # one-time: fetches the PDFium binary for your OS
 pnpm tauri dev   # full desktop app with hot reload
 # or: pnpm dev    # frontend only, via Vite
 ```
+
+The PDFium dynamic library PDF import depends on isn't committed to the repo
+(see `scripts/fetch-pdfium.mjs`'s header comment for why) — run the fetch
+script once after cloning, or PDF import will fail with a "failed to load the
+pdfium library" error. `cargo test` doesn't need this: the PDF fixture test
+skips gracefully when the library isn't present.
 
 ## Before opening a PR
 

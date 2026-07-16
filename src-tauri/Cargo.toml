@@ -25,7 +25,14 @@ calamine = { version = "0.33", features = ["dates"] }
 chrono = "0.4"
 pulldown-cmark = "0.13"
 markdown2pdf = "0.2"
-pdfium-render = { version = "0.9", features = ["thread_safe"] }
+# Pinned exactly (not "0.9") — this crate's `bind_to_library` resolves its
+# entire symbol table eagerly, keyed to a specific PDFium build via its
+# default `pdfium_<N>` feature. A caret-range dependency let CI silently pick
+# up 0.9.3's newer default (requiring PDFium >= chromium/7881) while the
+# vendored binary stayed frozen at an older build — see CLAUDE.md's PDFium
+# gotcha entry and scripts/fetch-pdfium.mjs for the full incident and fix.
+# Bump this and PDFIUM_VERSION in scripts/fetch-pdfium.mjs together, deliberately.
+pdfium-render = { version = "=0.9.3", features = ["thread_safe"] }
 zip = "2"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
 
