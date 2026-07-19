@@ -18,6 +18,10 @@ import { FindBar } from './FindBar';
 
 interface SourceEditorProps {
   documentId: string;
+  // See the identical prop doc on `Editor.tsx` — whether this instance is the
+  // one currently visible (active document AND active mode). Instances now
+  // stay mounted across switches instead of remounting via a `key` prop.
+  active: boolean;
 }
 
 interface SourceMatch {
@@ -37,7 +41,7 @@ function findMatches(text: string, term: string): SourceMatch[] {
   return results;
 }
 
-export const SourceEditor = ({ documentId }: SourceEditorProps) => {
+export const SourceEditor = ({ documentId, active }: SourceEditorProps) => {
   const { t } = useTranslation();
   const documents = useDocumentStore((state) => state.documents);
   const updateContent = useDocumentStore((state) => state.updateContent);
@@ -48,6 +52,7 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
   const setFindBarVisible = useUIStore((state) => state.setFindBarVisible);
   const setPendingAnchor = useEditorStore((state) => state.setPendingAnchor);
   const consumePendingAnchor = useEditorStore((state) => state.consumePendingAnchor);
+  const setCaptureActiveAnchor = useEditorStore((state) => state.setCaptureActiveAnchor);
   const setActiveHeadingIndex = useEditorStore((state) => state.setActiveHeadingIndex);
   const scrollToHeadingRequest = useEditorStore((state) => state.scrollToHeadingRequest);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -73,11 +78,22 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
 
   // Load the document's raw content into the textarea (layout effect so it
   // runs before the anchor-restore effect below, in the same commit).
+  //
+  // Now keyed on `content` (not just `documentId`): instances stay mounted
+  // across tab/mode switches (see EditorHost), so a hidden instance's
+  // textarea can otherwise go stale if the document is edited from the other
+  // mode while this one isn't visible — `documentId` alone would never
+  // re-fire past the first mount to pick that up. Guarded by a value check
+  // (not just `!==`, which would also true on every render) so a live edit
+  // typed into *this* textarea — whose `value` already equals `content` by
+  // the time this effect's dependency changes — doesn't get its cursor/
+  // selection reset by reassigning `.value` to the same string.
   useLayoutEffect(() => {
-    if (textareaRef.current && doc) {
-      textareaRef.current.value = doc.content;
+    const textarea = textareaRef.current;
+    if (textarea && doc && textarea.value !== doc.content) {
+      textarea.value = doc.content;
     }
-  }, [documentId]);
+  }, [documentId, doc, content]);
 
   // Measure each top-level block's pixel Y within the textarea's own content
   // flow (accounting for soft-wrapping), producing landmarks comparable to
@@ -92,8 +108,11 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
 
   // Restore the position (fractional viewport-top between two bracketing
   // headings) left behind when switching from WYSIWYG mode into source mode.
-  // Runs once on mount only — it should not re-fire when the user simply
-  // edits or switches documents.
+  // Runs once per false->true transition of `active` — this instance now
+  // stays mounted across both tab switches (kept alive by EditorHost) and
+  // mode switches (WYSIWYG <-> source, each kept alive per document), so
+  // "restore" can no longer be tied to mount. It must not re-fire just
+  // because the user edits or the document's content changes while active.
   //
   // The textarea's width is driven by `layoutMetrics.contentWidth`, which is
   // computed by `useEditorLayout`'s *passive* effect and is still 0 on this
@@ -115,6 +134,10 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
   // real pass ever gets to see it, and the restore silently never runs.
   const hasRestoredAnchorRef = useRef(false);
   useLayoutEffect(() => {
+    if (!active) {
+      hasRestoredAnchorRef.current = false;
+      return;
+    }
     const textarea = textareaRef.current;
     if (!textarea) return;
 
@@ -188,52 +211,56 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [active]);
 
-  // Capture the current position when this editor unmounts (i.e. the user
-  // switches to WYSIWYG mode), so it can be restored on the way back.
+  // Capture the current position when this instance is about to stop being
+  // the visible one — i.e. when the user switches to WYSIWYG mode for this
+  // same document (a tab switch away doesn't need this: the DOM subtree just
+  // stays mounted-but-hidden, so its native scrollTop is preserved for free).
   //
-  // Gated on `readyRef`, set one animation frame after mount: React
-  // StrictMode's synthetic mount→cleanup→mount cycle runs this cleanup
-  // *synchronously*, before any frame has elapsed, so `readyRef.current` is
-  // still `false` at that point and the capture is skipped. A real unmount
-  // (the user actually switching modes) always happens well after that first
-  // frame, so it captures normally. Without this guard, the synthetic
-  // cleanup would overwrite the still-pending, not-yet-restored anchor with
-  // a bogus one measured from the not-yet-laid-out textarea.
-  const readyRef = useRef(false);
-  useLayoutEffect(() => {
-    readyRef.current = false;
-    const raf = requestAnimationFrame(() => {
-      readyRef.current = true;
+  // Rather than capturing on unmount (there is no unmount anymore while
+  // switching modes — both Editor and SourceEditor instances for a document
+  // stay alive), this registers a stable closure in `editorStore` while
+  // `active`, which `uiStore`'s editor-mode toggle calls *synchronously*
+  // right before flipping the mode — i.e. while this instance's textarea is
+  // still visible/laid-out, avoiding the not-yet-laid-out (0-width) problem
+  // a post-hide measurement would hit.
+  const captureAnchor = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const text = contentRef.current;
+    const blocks = scanMarkdownBlocks(text);
+    const landmarks = measureLandmarks(textarea, text, blocks);
+    const contentHeight = textarea.scrollHeight;
+
+    const anchor = computeSegmentAnchor(landmarks, textarea.scrollTop, contentHeight);
+    setPendingAnchor({
+      documentId: documentIdRef.current,
+      ...anchor,
     });
-    return () => {
-      cancelAnimationFrame(raf);
-      const wasReady = readyRef.current;
-      readyRef.current = false;
-      if (!wasReady) return;
+  }, [measureLandmarks, setPendingAnchor]);
 
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-
-      const text = contentRef.current;
-      const blocks = scanMarkdownBlocks(text);
-      const landmarks = measureLandmarks(textarea, text, blocks);
-      const contentHeight = textarea.scrollHeight;
-
-      const anchor = computeSegmentAnchor(landmarks, textarea.scrollTop, contentHeight);
-      setPendingAnchor({
-        documentId: documentIdRef.current,
-        ...anchor,
-      });
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Close find bar when document changes
   useEffect(() => {
-    setFindBarVisible(false);
-  }, [documentId, setFindBarVisible]);
+    if (!active) return;
+    setCaptureActiveAnchor(captureAnchor);
+    return () => {
+      // Only clear if we're still the registered capturer — a different
+      // instance may have already become active and registered its own.
+      if (useEditorStore.getState().captureActiveAnchor === captureAnchor) {
+        setCaptureActiveAnchor(null);
+      }
+    };
+  }, [active, captureAnchor, setCaptureActiveAnchor]);
+
+  // Close find bar whenever this instance becomes the visible one (tab
+  // switch into this document, or mode switch into source for it). Keyed on
+  // `active` rather than `documentId` since instances stay mounted now —
+  // `documentId` never changes for a given instance, so it would never
+  // re-fire past the first mount.
+  useEffect(() => {
+    if (active) setFindBarVisible(false);
+  }, [active, setFindBarVisible]);
 
   // Cache measured heading Ys per (content, textarea width) so scroll-spy
   // doesn't rebuild the offscreen mirror div (`measureTextareaLineOffsets`)
@@ -252,7 +279,10 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
 
   // Outline scroll-spy: report whichever heading sits at (or just above) the
   // textarea's scrollTop, throttled to at most once per animation frame.
+  // Only the visible instance should drive this — a hidden instance's
+  // scrollTop/measurements aren't meaningful to show in the outline.
   useEffect(() => {
+    if (!active) return;
     const textarea = textareaRef.current;
     if (!textarea) return;
 
@@ -266,15 +296,15 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
         setActiveHeadingIndex(null);
         return;
       }
-      let active: number | null = null;
+      let activeIndex: number | null = null;
       for (let i = 0; i < headings.length; i++) {
         if (ys[i] <= ta.scrollTop + 4) {
-          active = headings[i].index;
+          activeIndex = headings[i].index;
         } else {
           break;
         }
       }
-      setActiveHeadingIndex(active);
+      setActiveHeadingIndex(activeIndex);
     };
 
     const onScroll = () => {
@@ -289,11 +319,13 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       setActiveHeadingIndex(null);
     };
-  }, [documentId, content, getHeadingLandmarks, setActiveHeadingIndex]);
+  }, [active, documentId, content, getHeadingLandmarks, setActiveHeadingIndex]);
 
   // Outline click-to-scroll: consume a scroll request fired from
-  // OutlinePanel and scroll/select the target heading.
+  // OutlinePanel and scroll/select the target heading. Only the visible
+  // instance should act on it.
   useEffect(() => {
+    if (!active) return;
     if (!scrollToHeadingRequest) return;
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -390,8 +422,8 @@ export const SourceEditor = ({ documentId }: SourceEditorProps) => {
   }
 
   return (
-    <div className="relative h-full w-full">
-      {findBarVisible && (
+    <div className="relative h-full w-full" hidden={!active}>
+      {active && findBarVisible && (
         <FindBar
           searchTerm={searchTerm}
           replaceTerm={replaceTerm}

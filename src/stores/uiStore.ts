@@ -2,6 +2,16 @@ import { create } from 'zustand';
 import { persist, PersistOptions } from 'zustand/middleware';
 import { ThemeName, THEME_NAMES } from '@/theme/types';
 import { applyTheme } from '@/theme/utils';
+import { useEditorStore } from '@/stores/editorStore';
+
+// Plain function (not a hook) — safe to call from a store action rather than
+// component render. Editor instances register `captureActiveAnchor` while
+// they're the visible one (see `editorStore.ts`); calling it here right
+// before an editor-mode flip captures the outgoing instance's scroll
+// position while its DOM is still visible/laid-out.
+function captureActiveEditorAnchor(): void {
+  useEditorStore.getState().captureActiveAnchor?.();
+}
 
 interface UIState {
   currentTheme: ThemeName;
@@ -106,12 +116,21 @@ export const useUIStore = create<UIState>()(
       setOsPlatform: (platform: 'macos' | 'windows' | 'gnome') =>
         set({ osPlatform: platform }),
 
-      setEditorMode: (mode) => set({ editorMode: mode }),
+      setEditorMode: (mode) => {
+        // Capture the outgoing visible editor's scroll position *before*
+        // flipping the mode, while its DOM is still visible/laid-out — see
+        // `editorStore.captureActiveAnchor`'s doc comment. Editor instances
+        // now stay mounted (keep-alive across tab/mode switches), so nothing
+        // else triggers this capture for us.
+        captureActiveEditorAnchor();
+        set({ editorMode: mode });
+      },
 
       toggleEditorMode: () =>
-        set((state) => ({
-          editorMode: state.editorMode === 'wysiwyg' ? 'source' : 'wysiwyg',
-        })),
+        set((state) => {
+          captureActiveEditorAnchor();
+          return { editorMode: state.editorMode === 'wysiwyg' ? 'source' : 'wysiwyg' };
+        }),
 
       initializeTheme: () => {
         const state = get();

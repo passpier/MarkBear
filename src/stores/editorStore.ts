@@ -26,6 +26,14 @@ interface EditorState {
   // if the same heading is clicked twice in a row.
   scrollToHeadingRequest: ScrollToHeadingRequest | null;
   requestScrollToHeading: (index: number) => void;
+  // Registered by whichever editor instance (WYSIWYG or source, for whichever
+  // document) is currently the visible/active one. Called synchronously by
+  // `uiStore`'s editor-mode toggle *before* flipping the mode, so the anchor
+  // is captured from the still-visible DOM rather than racing a layout effect
+  // that would run after the instance is hidden (`hidden` attr → 0-height
+  // rects). A no-op default so callers can invoke it unconditionally.
+  captureActiveAnchor: (() => void) | null;
+  setCaptureActiveAnchor: (fn: (() => void) | null) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -38,6 +46,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ pendingAnchor: null });
     return anchor;
   },
+  captureActiveAnchor: null,
+  setCaptureActiveAnchor: (fn) => set({ captureActiveAnchor: fn }),
   activeHeadingIndex: null,
   setActiveHeadingIndex: (index) => set({ activeHeadingIndex: index }),
   scrollToHeadingRequest: null,

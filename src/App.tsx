@@ -6,8 +6,7 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { WindowTitlebar } from 'tauri-controls';
-import { Editor } from '@/components/Editor/Editor';
-import { SourceEditor } from '@/components/Editor/SourceEditor';
+import { EditorHost } from '@/components/Editor/EditorHost';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { TabBar } from '@/components/Tabs/TabBar';
 import { UnsavedCloseDialog } from '@/components/Tabs/UnsavedCloseDialog';
@@ -22,7 +21,6 @@ import { useAutoSave } from '@/hooks/useAutoSave';
 import { usePlatformInitialization } from '@/hooks/usePlatformInitialization';
 import { getPrimaryLanguageCode } from '@/i18n/languageUtils';
 import {
-  FileText,
   PanelLeft,
   Settings,
 } from 'lucide-react';
@@ -792,32 +790,13 @@ function App() {
         {/* Editor Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <TabBar requestCloseDocument={requestCloseDocument} />
-          {activeDocumentId ? (
-            <>
-              <div className="flex-1 overflow-hidden">
-                {/* Keyed by documentId so each open document gets its own Tiptap
-                    instance on switch. Without this key, a single shared editor
-                    instance is reused across documents, which bleeds undo/redo
-                    history between tabs and lets a stale `onUpdate` closure
-                    write content to the wrong document after a fast switch. */}
-                {editorMode === 'wysiwyg' ? (
-                  <Editor key={activeDocumentId} documentId={activeDocumentId} />
-                ) : (
-                  <SourceEditor key={activeDocumentId} documentId={activeDocumentId} />
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <FileText className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                <p className="text-lg">{t('common.no_document_open')}</p>
-                <p className="text-sm mt-2">
-                  {t('common.create_or_open')}
-                </p>
-              </div>
-            </div>
-          )}
+          {/* EditorHost keeps a bounded LRU of visited documents' Editor +
+              SourceEditor instances mounted (hidden, not unmounted) so tab
+              switches and preview<->source toggles are instant instead of
+              paying a full Tiptap remount/re-parse every time — see its doc
+              comment for the previous `key={activeDocumentId}` approach this
+              replaced. */}
+          <EditorHost />
         </div>
       </div>
       {/* Import/Export status toast */}

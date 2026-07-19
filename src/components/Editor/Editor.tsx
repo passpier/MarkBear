@@ -8,7 +8,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import type { MarkdownSerializerState } from '@tiptap/pm/markdown';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { createLowlight, common } from 'lowlight';
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -32,6 +32,14 @@ import { TableHoverPanel } from './TableHoverPanel';
 
 interface EditorProps {
   documentId: string;
+  // Whether this instance is the one currently visible (active document AND
+  // active mode). Editor instances now stay mounted across tab/mode switches
+  // (see EditorHost) instead of being remounted via a `key` prop, so every
+  // side effect that should only apply to the on-screen instance — global
+  // editor registration, outline scroll-spy, find sync, scroll-anchor
+  // capture/restore — is gated on this flag rather than firing unconditionally
+  // on mount.
+  active: boolean;
 }
 
 /**
@@ -44,7 +52,7 @@ function dirname(path: string): string {
   return parts.join('/');
 }
 
-export const Editor = memo(function Editor({ documentId }: EditorProps) {
+export const Editor = memo(function Editor({ documentId, active }: EditorProps) {
   const documents = useDocumentStore((state) => state.documents);
   const updateContent = useDocumentStore((state) => state.updateContent);
   const fontSize = useUIStore((state) => state.fontSize);
@@ -52,6 +60,7 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
   const setEditor = useEditorStore((state) => state.setEditor);
   const setPendingAnchor = useEditorStore((state) => state.setPendingAnchor);
   const consumePendingAnchor = useEditorStore((state) => state.consumePendingAnchor);
+  const setCaptureActiveAnchor = useEditorStore((state) => state.setCaptureActiveAnchor);
   const setActiveHeadingIndex = useEditorStore((state) => state.setActiveHeadingIndex);
   const scrollToHeadingRequest = useEditorStore((state) => state.scrollToHeadingRequest);
   const findBarVisible = useUIStore((state) => state.findBarVisible);
@@ -267,10 +276,20 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
     }, 500),
   });
 
+  // Only the active instance registers itself as *the* global editor (toolbar
+  // and native-menu commands act on whichever editor is registered here). On
+  // deactivate/unmount, clear the registration only if we're still the one
+  // registered — a different instance may have already become active and
+  // overwritten it, and we must not clobber that.
   useEffect(() => {
-    setEditor(editor ?? null);
-    return () => setEditor(null);
-  }, [editor, setEditor]);
+    if (!active || !editor) return;
+    setEditor(editor);
+    return () => {
+      if (useEditorStore.getState().editor === editor) {
+        setEditor(null);
+      }
+    };
+  }, [active, editor, setEditor]);
 
   // Update editor content when document changes
   useEffect(() => {
@@ -363,8 +382,19 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
   // started moving.
   const MIN_SETTLE_FRAMES = 2;
 
+  // This instance now stays mounted across both tab switches (kept alive by
+  // EditorHost) and mode switches (WYSIWYG <-> source, still separate
+  // components but both kept alive per document), so "restore" can no longer
+  // be tied to mount — it needs to re-run on every false->true transition of
+  // `active` (each time this instance becomes the visible one), and only
+  // then. `hasRestoredAnchorRef` tracks that per-activation, reset back to
+  // false whenever this instance goes inactive.
   const hasRestoredAnchorRef = useRef(false);
   useEffect(() => {
+    if (!active) {
+      hasRestoredAnchorRef.current = false;
+      return;
+    }
     if (hasRestoredAnchorRef.current) return;
     if (!editor || !document) return;
 
@@ -447,59 +477,53 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
     return () => {
       cancelled = true;
     };
-  }, [editor, document, documentId, consumePendingAnchor, measureBlockLandmarks]);
+  }, [active, editor, document, documentId, consumePendingAnchor, measureBlockLandmarks]);
 
-  // Capture the current position when this editor unmounts (i.e. the user
-  // switches to source mode), so it can be restored on the way back.
+  // Capture the current position when this instance is about to stop being
+  // the visible one — i.e. when the user switches to source mode for this
+  // same document (a tab switch away doesn't need this: the DOM subtree just
+  // stays mounted-but-hidden, so its native scrollTop is preserved for free).
+  //
+  // Rather than capturing on unmount (there is no unmount anymore while
+  // switching modes — both Editor and SourceEditor instances for a document
+  // stay alive), this registers a stable closure in `editorStore` while
+  // `active`, which `uiStore`'s editor-mode toggle calls *synchronously*
+  // right before flipping the mode — i.e. while this instance's DOM is still
+  // visible/laid-out, avoiding the all-zero-rect problem a post-hide
+  // measurement would hit.
   const editorRef = useRef(editor);
   editorRef.current = editor;
   const documentIdRef = useRef(documentId);
   documentIdRef.current = documentId;
   const measureBlockLandmarksRef = useRef(measureBlockLandmarks);
   measureBlockLandmarksRef.current = measureBlockLandmarks;
-  // useLayoutEffect (not useEffect) is required here: its cleanup runs
-  // synchronously during the commit, before React detaches this subtree's
-  // DOM. A plain useEffect's cleanup fires asynchronously after the DOM is
-  // already removed, at which point getBoundingClientRect() on the container
-  // and every heading returns an all-zero rect, collapsing every landmark to
-  // the same Y and producing a garbage anchor.
-  //
-  // Gated on `captureReadyRef`, set one animation frame after mount: React
-  // StrictMode mounts every component, tears it down, and mounts it again as
-  // a purity check, and that synthetic teardown runs this cleanup
-  // *synchronously* — before any frame has elapsed and before the anchor
-  // restore effect above has actually applied its scroll position. Without
-  // this guard, that synthetic cleanup would capture the not-yet-restored
-  // (or not-yet-laid-out) state and overwrite a still-pending, correct
-  // anchor with a bogus one. A real unmount (the user switching modes) always
-  // happens well after that first frame, so it captures normally.
-  const captureReadyRef = useRef(false);
-  useLayoutEffect(() => {
-    captureReadyRef.current = false;
-    const raf = requestAnimationFrame(() => {
-      captureReadyRef.current = true;
+
+  const captureAnchor = useCallback(() => {
+    const ed = editorRef.current;
+    const container = containerRef.current;
+    if (!ed || !container) return;
+
+    const landmarks = measureBlockLandmarksRef.current(ed, container);
+    const contentHeight = container.scrollHeight;
+    const anchor = computeSegmentAnchor(landmarks, container.scrollTop, contentHeight);
+
+    setPendingAnchor({
+      documentId: documentIdRef.current,
+      ...anchor,
     });
+  }, [setPendingAnchor]);
+
+  useEffect(() => {
+    if (!active) return;
+    setCaptureActiveAnchor(captureAnchor);
     return () => {
-      cancelAnimationFrame(raf);
-      const wasReady = captureReadyRef.current;
-      captureReadyRef.current = false;
-      if (!wasReady) return;
-
-      const ed = editorRef.current;
-      const container = containerRef.current;
-      if (!ed || !container) return;
-
-      const landmarks = measureBlockLandmarksRef.current(ed, container);
-      const contentHeight = container.scrollHeight;
-      const anchor = computeSegmentAnchor(landmarks, container.scrollTop, contentHeight);
-
-      setPendingAnchor({
-        documentId: documentIdRef.current,
-        ...anchor,
-      });
+      // Only clear if we're still the registered capturer — a different
+      // instance may have already become active and registered its own.
+      if (useEditorStore.getState().captureActiveAnchor === captureAnchor) {
+        setCaptureActiveAnchor(null);
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [active, captureAnchor, setCaptureActiveAnchor]);
 
   // Toggle a `mod-held` class on the editor DOM while Cmd (macOS) / Ctrl
   // (Windows) is held, so the CSS in index.css (`.tiptap.mod-held a:hover`)
@@ -557,20 +581,26 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
     }
   }, [hasMeasuredLayout, layoutMetrics.contentWidth]);
 
-  // Sync search term into Tiptap search extension
+  // Sync search term into Tiptap search extension — only for the visible
+  // instance; findBarVisible/searchTerm are global UI state.
   useEffect(() => {
+    if (!active) return;
     if (editor && findBarVisible) {
       editor.commands.setSearchTerm(searchTerm);
     } else if (editor && !findBarVisible) {
       editor.commands.setSearchTerm('');
       setSearchTerm('');
     }
-  }, [searchTerm, findBarVisible, editor]);
+  }, [active, searchTerm, findBarVisible, editor]);
 
-  // Close find bar when document changes
+  // Close find bar whenever this instance becomes the visible one (tab
+  // switch into this document, or mode switch into WYSIWYG for it). Keyed on
+  // `active` rather than `documentId` since instances stay mounted now —
+  // `documentId` never changes for a given instance, so it would never
+  // re-fire past the first mount.
   useEffect(() => {
-    setFindBarVisible(false);
-  }, [documentId, setFindBarVisible]);
+    if (active) setFindBarVisible(false);
+  }, [active, setFindBarVisible]);
 
   // Every heading node in document order, paired with its ProseMirror
   // position, keyed by a 0-based ordinal across only headings — this matches
@@ -591,8 +621,11 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
 
   // Outline scroll-spy: report whichever heading sits at (or just above) the
   // container's viewport-top, throttled to at most once per animation frame
-  // so scrolling stays smooth.
+  // so scrolling stays smooth. Only the visible instance should drive this —
+  // a hidden instance's container measures an all-zero rect, which would
+  // otherwise clobber the outline highlight with garbage.
   useEffect(() => {
+    if (!active) return;
     const container = containerRef.current;
     if (!editor || !container) return;
 
@@ -605,19 +638,19 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
         return;
       }
       const containerTop = container.getBoundingClientRect().top;
-      let active: number | null = null;
+      let activeIndex: number | null = null;
       for (const { index, offset } of headingNodes) {
         const dom = editor.view.nodeDOM(offset);
         const el = dom instanceof HTMLElement ? dom : dom?.parentElement;
         if (!el) continue;
         const y = el.getBoundingClientRect().top - containerTop;
         if (y <= 24) {
-          active = index;
+          activeIndex = index;
         } else {
           break;
         }
       }
-      setActiveHeadingIndex(active);
+      setActiveHeadingIndex(activeIndex);
     };
 
     const onScroll = () => {
@@ -632,11 +665,15 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
       if (rafId !== null) cancelAnimationFrame(rafId);
       setActiveHeadingIndex(null);
     };
-  }, [editor, document?.content, getHeadingNodes, setActiveHeadingIndex]);
+  }, [active, editor, document?.content, getHeadingNodes, setActiveHeadingIndex]);
 
   // Outline click-to-scroll: consume a scroll request fired from
-  // OutlinePanel and scroll the target heading into view.
+  // OutlinePanel and scroll the target heading into view. Only the visible
+  // instance should act on it — a hidden instance scrolling itself is just
+  // wasted work (and its scrollIntoView could fight the container's native
+  // scroll restore when it's later shown again).
   useEffect(() => {
+    if (!active) return;
     if (!editor || !scrollToHeadingRequest) return;
     const headingNodes = getHeadingNodes(editor);
     const target = headingNodes.find((h) => h.index === scrollToHeadingRequest.index);
@@ -694,8 +731,8 @@ export const Editor = memo(function Editor({ documentId }: EditorProps) {
   }
 
   return (
-    <div className="relative h-full w-full">
-      {findBarVisible && (
+    <div className="relative h-full w-full" hidden={!active}>
+      {active && findBarVisible && (
         <FindBar
           searchTerm={searchTerm}
           replaceTerm={replaceTerm}
