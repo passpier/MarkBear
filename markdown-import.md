@@ -140,11 +140,33 @@ standardized read/print, respectively).
   aligns under one interior column, other columns empty) is merged back into
   the row above with `<br>`. Detected regions render as GFM tables. As a
   hybrid confirming signal, ruling lines drawn as PDF path objects are used
-  to refuse a continuation merge across an explicit row separator — this
-  never loosens the geometry gate, so borderless tables are unaffected.
+  to refuse a continuation merge across an explicit row separator. A short
+  bordered table (as few as 2 aligned rows) additionally clears the gate on
+  its own — without waiting for a third aligned row — when it's enclosed by
+  a real ruled box: a horizontal rule immediately above and below the row
+  range, plus an interior vertical rule between the columns
+  (`is_bordered_grid`, fed by a second path-object scan,
+  `collect_vertical_rules`, mirroring the existing horizontal-rule scan).
+  This never loosens the borderless path — a page with no drawn table
+  borders (`v_rules`/`h_rules` empty) behaves exactly as before.
+- Equations are demarcated best-effort, not reconstructed as LaTeX: a run
+  whose PDF font is a recognized math family — Computer Modern/AMS
+  (`CMMI`/`CMSY`/`CMEX`/`MSBM`, LaTeX output) or MathType (`RMTMI`/`MTSYN`/
+  `MTEX`, Word/desktop-publishing output) — or whose text is dense in math
+  symbols/Greek letters is wrapped inline as `$…$` (`is_math_font`,
+  `block_is_math` in `convert/pdf.rs`). A whole line that's math-dominant by
+  character-weighted ratio renders as its own `$$…$$` display equation
+  instead, with a trailing parenthesized equation number kept outside the
+  delimiters (`split_trailing_eq_number`). Unicode symbols are preserved as
+  extracted; this is a font-position heuristic, not a math-OCR model, so it
+  cannot produce true LaTeX.
 - Embedded images are extracted from each page's image objects and written as
   sidecar files, positioned in reading order alongside the surrounding text;
-  exact placement is approximate for complex layouts.
+  exact placement is approximate for complex layouts. An adjacent caption
+  line (`Figure N`, `Fig. N`, `Table N`, `表 N`, `圖 N` — `is_caption_label`)
+  is used as the image's alt text (`with_caption_alt`), preferring the line
+  right after the image and falling back to the one right before; the
+  caption line itself is left in place, this only adds alt text.
 
 ### PowerPoint (`.pptx`) — manual ZIP + XML parsing
 
@@ -182,7 +204,15 @@ rather than a broken image link.
   complex layouts is approximate. Table detection is conservative by design:
   a table whose wrapped cell content is itself an indented/bulleted list
   (outside the column-alignment tolerance) drops that row back to plain
-  paragraphs rather than corrupting the table.
+  paragraphs rather than corrupting the table. Math is demarcated
+  best-effort (`$…$` / `$$…$$`, Unicode symbols preserved as extracted) from
+  math-font/math-symbol detection, not reconstructed as true LaTeX — that
+  would require a math-OCR model, which is out of scope for this pure-Rust,
+  offline heuristic pipeline. A trailing all-digit parenthetical on a
+  display-math line (e.g. a citation year) is indistinguishable from an
+  equation number and gets split off the same way; in practice this only
+  matters on lines already math-dominant enough to be treated as display
+  equations.
 - Two-column detection targets the common two-column journal layout
   specifically; three-or-more-column layouts, mixed/irregular column widths,
   and rotated text aren't handled and fall back to single-column reading

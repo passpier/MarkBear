@@ -64,6 +64,38 @@ in `Editor.tsx`, which resolves the document's `assetDir` via `convertFileSrc`.
   table detection (`row_has_dot_leader` in `convert/pdf.rs`) and instead
   rendered as a flat bulleted list with the leader collapsed to `…`, since
   they otherwise satisfy the column-alignment gates but aren't tabular data.
+  A short *bordered* table (as few as 2 aligned rows) clears the gate without
+  the usual third row when it sits inside a real ruled box: a horizontal
+  rule immediately above and below the row range, plus an interior vertical
+  rule between the columns (`is_bordered_grid`, fed by `collect_vertical_rules`,
+  a second path-object scan mirroring the existing `collect_horizontal_rules`)
+  — independent structural evidence standing in for `MIN_CORE_ROWS`. A page
+  with no drawn table borders (the common case; `h_rules`/`v_rules` empty)
+  behaves exactly as before this existed.
+- Equations are demarcated best-effort as `$…$` (inline) / `$$…$$` (display),
+  not reconstructed as LaTeX — a font-position heuristic can't do real math
+  OCR. A run is math if its PDF font matches a known math family
+  (`is_math_font` in `convert/pdf.rs`; confirmed against two real papers:
+  Computer Modern/AMS — `CMMI`/`CMSY`/`CMEX`/`MSBM`, LaTeX output — and
+  MathType — `RMTMI`/`MTSYN`/`MTEX`, Word/desktop-publishing output; matched
+  by prefix after stripping the PDF subset tag, e.g. `"ZYPRQG+CMMI10"`) or,
+  as a fallback for a formula typeset in a non-dedicated font, its text is
+  dense in math symbols/Greek letters (`block_is_math`). A whole line whose
+  character-weighted math ratio (`line_math_ratio`) clears
+  `DISPLAY_MATH_MIN_RATIO` renders as its own `$$…$$` block instead of inline,
+  with a trailing parenthesized equation number kept outside the delimiters
+  (`split_trailing_eq_number`) — which can't distinguish a genuine equation
+  number from an all-digit citation year by shape alone, though in practice
+  this function only ever runs on a line already gated as math-dominant, so
+  an ordinary citation sentence never reaches it.
+- An image adjacent to a figure/table caption line (`Figure N`, `Fig. N`,
+  `Table N`, `表 N`, `圖 N` — `is_caption_label` in `convert/pdf.rs`, requires
+  a numeral right after the label so "Table tennis…" doesn't false-positive)
+  gets that caption's text as its `![]()` alt attribute (`with_caption_alt`),
+  preferring the line right after the image and falling back to the one
+  right before; the caption line itself is left in place and still rendered
+  on its own line — this only adds alt text, it doesn't merge or reorder
+  anything.
 - Standard two-column journal layouts (e.g. IEEE Access) are detected
   (`detect_gutter` in `convert/pdf.rs`, requires ≥4 lines with independent
   left/right content — same "repeated structural evidence" gate as table

@@ -67,6 +67,7 @@ pub fn pdf_to_markdown(path: &str, media: &mut MediaSink) -> Result<String, Conv
         pages.push(PageContent {
             blocks: extract_page_blocks(&page, media)?,
             h_rules: collect_horizontal_rules(&page),
+            v_rules: collect_vertical_rules(&page),
             height: page.height().value,
         });
     }
@@ -86,7 +87,7 @@ pub fn pdf_to_markdown(path: &str, media: &mut MediaSink) -> Result<String, Conv
     for page in &pages {
         let kept = filter_header_footer_blocks(&page.blocks, page.height, &hf_keys);
         let kept = filter_repeated_images(&kept, &repeated_images);
-        md.push_str(&render_page_blocks(&kept, &page.h_rules, heading_body_size));
+        md.push_str(&render_page_blocks(&kept, &page.h_rules, &page.v_rules, heading_body_size));
         md.push('\n');
     }
 
@@ -281,6 +282,17 @@ fn is_all_caps_heading(text: &str) -> bool {
     if contains_dot_leader(text) {
         return false;
     }
+    // A line that's a two-column extraction artifact (left column text
+    // duplicated verbatim as the right column) is never a real heading, no
+    // matter how all-caps it looks — see `is_duplicated_halves`.
+    if is_duplicated_halves(text) {
+        return false;
+    }
+    // An author byline is all-caps like a real heading but carries a mid-line
+    // single-letter initial ("W.", "J. G.") — see `looks_like_author_byline`.
+    if looks_like_author_byline(text) {
+        return false;
+    }
     // No sentence-ending punctuation
     if text.ends_with('.') || text.ends_with(',') || text.ends_with(':') {
         return false;
@@ -308,6 +320,41 @@ fn is_all_caps_heading(text: &str) -> bool {
     (ascii_letter_count as f32 / non_space_count as f32) >= ALL_CAPS_MIN_LETTER_RATIO
 }
 
+/// True if `text`'s whitespace-separated tokens split into two equal-length
+/// halves that are identical, e.g. `"AIS AIS"` or
+/// `"EN-DE EN-FR EN-DE EN-FR"` (tokens `[EN-DE, EN-FR]` == `[EN-DE, EN-FR]`).
+///
+/// This is the signature of a two-column PDF extraction artifact: pdfium
+/// sometimes merges a line's left-column and right-column runs into one
+/// logical line where the right column happens to repeat the left column's
+/// text verbatim (seen in a table whose columns pdfium read as duplicated
+/// text rather than genuine cells). Deliberately an *exact* halves match
+/// (not "any repeated token") so an ordinary title that happens to reuse a
+/// word ("… AND … AND …") is untouched — only a line that is *literally* two
+/// copies of the same run back-to-back qualifies.
+fn is_duplicated_halves(text: &str) -> bool {
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    if tokens.len() < 2 || !tokens.len().is_multiple_of(2) {
+        return false;
+    }
+    let (first, second) = tokens.split_at(tokens.len() / 2);
+    first == second
+}
+
+/// True if `text` contains a mid-line single-letter initial — a bare ASCII
+/// uppercase letter followed by `.`, at token index ≥ 1 — the shape of an
+/// author byline like `"RICHARD W. ZIOLKOWSKI"` (`W.` at index 1) or
+/// `"AND NELSON J. G. FONSECA"` (`J.` at index 2).
+///
+/// The index-≥1 restriction is what keeps this from rejecting a real lettered
+/// subsection heading, whose own letter-dot label sits at index 0
+/// (`"A. RUZE LENS"`, `"I. INTRODUCTION"`) — those are left alone.
+fn looks_like_author_byline(text: &str) -> bool {
+    text.split_whitespace()
+        .skip(1)
+        .any(|tok| tok.len() == 2 && tok.ends_with('.') && tok.chars().next().is_some_and(|c| c.is_ascii_uppercase()))
+}
+
 #[derive(Clone)]
 struct TextBlock {
     x: f32,
@@ -321,6 +368,12 @@ struct TextBlock {
     /// True for an already-formatted `![]()` image link — excluded from
     /// heading classification since it has no meaningful font size.
     is_image: bool,
+    /// The run's `/BaseFont` name, e.g. "ZYPRQG+CMMI10" (subset-prefixed) or
+    /// "Times-Roman" — empty for image blocks. Used only by [`is_math_font`]
+    /// to detect math-typeset runs (Computer Modern / AMS or MathType math
+    /// families) for best-effort inline/display equation demarcation; never
+    /// used for heading/table geometry.
+    font_name: String,
 }
 
 /// One cell of a detected table row, carrying its horizontal span so rows can
@@ -463,6 +516,68 @@ fn content_image_key(bytes: &[u8]) -> String {
     format!("pdf-img-{}-{:016x}.png", bytes.len(), hasher.finish())
 }
 
+/// Caption labels a figure/table caption line commonly starts with, checked
+/// longest-first so "Figure 3" isn't mistaken for the shorter "Fig" prefix
+/// (see [`is_caption_label`]).
+const CAPTION_LABEL_PREFIXES: &[&str] = &["Figure", "Fig.", "Fig", "Table", "表", "圖"];
+
+/// True if `text` starts with a figure/table caption label ([`CAPTION_LABEL_PREFIXES`])
+/// immediately followed by a numeral (e.g. "Figure 3: …", "Table 1.",
+/// "圖 2"), used by [`with_caption_alt`] to associate a caption line with an
+/// adjacent image block's alt text. Requires a digit right after the label
+/// (allowing one space) so an unrelated sentence starting with "Table" or
+/// "Figure" as an ordinary word ("Table tennis is popular") doesn't match.
+/// Case-insensitive: confirmed against a real IEEE-style paper, which
+/// typesets caption labels in ALL CAPS ("FIGURE 1.", "TABLE 1.") rather than
+/// the Title Case used elsewhere ("Figure 1:").
+fn is_caption_label(text: &str) -> bool {
+    let upper = text.trim_start().to_ascii_uppercase();
+    for &prefix in CAPTION_LABEL_PREFIXES {
+        if let Some(rest) = upper.strip_prefix(&prefix.to_ascii_uppercase()) {
+            if rest.trim_start().chars().next().is_some_and(|c| c.is_ascii_digit()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Escapes a caption for use as a Markdown image's alt text: brackets would
+/// otherwise prematurely close the `![…]` span, so they're swapped for
+/// parens rather than backslash-escaped (simpler, and captions containing a
+/// literal bracket are rare enough that the fidelity loss is negligible).
+fn escape_alt_text(text: &str) -> String {
+    text.replace('[', "(").replace(']', ")")
+}
+
+/// Enriches an already-rendered bare `![]()` image link (`image_md`, the
+/// text of the image line at `line_texts[i]`) with an adjacent figure/table
+/// caption's text as its alt attribute — e.g. `![Figure 3: Model
+/// architecture](assets/fig.png)` — so an image gets meaningful alt text
+/// from layout alone, no LLM captioning needed. Prefers the following line
+/// (the common "image, then caption below it" layout) and falls back to the
+/// preceding one. The
+/// caption line itself is left in place and still rendered on its own line
+/// immediately after/before — this only adds alt text, it doesn't merge or
+/// remove anything, so reading order is unaffected. A no-op (returns
+/// `image_md` unchanged) if `image_md` isn't a bare `![]()` link (e.g. the
+/// `*(unsupported image)*` placeholder for an unrenderable vector image) or
+/// no adjacent line matches [`is_caption_label`].
+fn with_caption_alt(image_md: &str, line_texts: &[String], i: usize) -> String {
+    if !image_md.starts_with("![](") {
+        return image_md.to_string();
+    }
+    let next = line_texts.get(i + 1).map(|s| s.trim());
+    let prev = if i > 0 { line_texts.get(i - 1).map(|s| s.trim()) } else { None };
+    let caption = next
+        .filter(|s| is_caption_label(s))
+        .or_else(|| prev.filter(|s| is_caption_label(s)));
+    match caption {
+        Some(cap) => image_md.replacen("![](", &format!("![{}](", escape_alt_text(cap)), 1),
+        None => image_md.to_string(),
+    }
+}
+
 /// True if `text` has a TOC-style leader: either a literal-dot run (see
 /// [`contains_dot_leader`]) or a real ellipsis glyph (U+2026). PDFs often
 /// extract a rendered "…" character rather than a run of "." glyphs, and that
@@ -516,6 +631,162 @@ fn contains_greek(text: &str) -> bool {
     text.chars().any(|c| ('\u{0370}'..='\u{03FF}').contains(&c))
 }
 
+/// True if `name` — a PDF run's `/BaseFont`, possibly subset-prefixed like
+/// "ZYPRQG+CMMI10" — belongs to one of the math-symbol font families used to
+/// typeset equations rather than body prose, confirmed against two real
+/// failing samples: LaTeX/Computer-Modern-and-AMS output ("CMMI10",
+/// "CMSY7", "CMEX10", "MSBM10" — a Generative Adversarial Networks paper) and
+/// MathType output ("RMTMI", "MTSYN", "MTEX" — an IEEE-style antenna review).
+/// Deliberately prefix-based rather than an exact-name allowlist, since the
+/// subset suffix digit (e.g. "CMMI10" vs "CMMI7") varies by point size and
+/// weight. Note "CMBX" (Computer Modern Bold Extended, an ordinary bold text
+/// face) is *not* a prefix match here — only the math-symbol families are.
+fn is_math_font(name: &str) -> bool {
+    let stripped = name.rsplit_once('+').map(|(_, rest)| rest).unwrap_or(name);
+    let upper = stripped.to_ascii_uppercase();
+    const MATH_FONT_PREFIXES: &[&str] = &[
+        "CMMI", "CMSY", "CMEX", "CMBSY", "MSBM", "MSAM", // Computer Modern / AMS math
+        "RMTMI", "MTSY", "MTEX", "MTMI", // MathType
+        "SYMBOL", "MATHJAX", "STIX",
+    ];
+    MATH_FONT_PREFIXES.iter().any(|p| upper.starts_with(p)) || upper.contains("MATH")
+}
+
+/// Math-only Unicode symbols used as a fallback math signal when a run's
+/// font name isn't recognized by [`is_math_font`] (e.g. a math run embedded
+/// in a body-text font, or a PDF that doesn't subset a dedicated math font at
+/// all). Deliberately the same curated set as [`HEADING_TITLE_REJECT_SYMBOLS`]
+/// — both exist to recognize "this text is a formula, not prose" — but kept
+/// as a separate constant since the two call sites classify different things
+/// (a heading candidate's title vs. an arbitrary run) and may need to diverge.
+const MATH_SYMBOL_CHARS: &[char] = &[
+    '=', '∇', '∼', '∈', '×', '√', '·', '∗', '∞', '≤', '≥', '−', '±', '∑', '∏', '∂', '∫', '÷', '→',
+];
+
+/// True if `c` is a math-only symbol ([`MATH_SYMBOL_CHARS`]) or a Greek
+/// letter ([`contains_greek`]) — the fallback signal `block_is_math` uses
+/// when font-name matching doesn't apply.
+fn is_math_symbol_char(c: char) -> bool {
+    MATH_SYMBOL_CHARS.contains(&c) || ('\u{0370}'..='\u{03FF}').contains(&c)
+}
+
+/// Fraction of `text`'s non-whitespace characters that are math-only symbols
+/// or Greek letters (see [`is_math_symbol_char`]).
+fn math_symbol_density(text: &str) -> f32 {
+    let total = text.chars().filter(|c| !c.is_whitespace()).count();
+    if total == 0 {
+        return 0.0;
+    }
+    let math_chars = text.chars().filter(|&c| is_math_symbol_char(c)).count();
+    math_chars as f32 / total as f32
+}
+
+/// Above this math-symbol density, a run with no recognized math font name
+/// is still treated as math (see [`block_is_math`]) — e.g. a formula
+/// rendered in a body-text font, or one whose subset name isn't in
+/// [`is_math_font`]'s list. Below it, a stray symbol or two in ordinary
+/// prose (an em dash, a multiplication sign in "4×6") isn't enough.
+const MATH_SYMBOL_DENSITY_THRESHOLD: f32 = 0.3;
+
+/// True if `block` is part of a math run: its font is a recognized math
+/// family ([`is_math_font`]), or — as a fallback for math typeset in a
+/// non-dedicated font — its text is dense in math symbols/Greek letters
+/// ([`math_symbol_density`] ≥ [`MATH_SYMBOL_DENSITY_THRESHOLD`]). Image
+/// blocks are never math.
+fn block_is_math(block: &TextBlock) -> bool {
+    if block.is_image {
+        return false;
+    }
+    if is_math_font(&block.font_name) {
+        return true;
+    }
+    let text = block.text.trim();
+    !text.is_empty() && math_symbol_density(text) >= MATH_SYMBOL_DENSITY_THRESHOLD
+}
+
+/// Fraction of a line's non-whitespace character count that comes from
+/// math blocks (see [`block_is_math`]), weighted by character count so a
+/// long math run outweighs a short adjacent label. Used to decide whether a
+/// whole line is a display equation ([`DISPLAY_MATH_MIN_RATIO`]) rather than
+/// ordinary prose carrying an inline formula fragment.
+fn line_math_ratio(blocks: &[TextBlock], line: &[usize]) -> f32 {
+    let mut math_chars = 0usize;
+    let mut total_chars = 0usize;
+    for &idx in line {
+        let block = &blocks[idx];
+        if block.is_image {
+            continue;
+        }
+        let n = block.text.trim().chars().filter(|c| !c.is_whitespace()).count();
+        total_chars += n;
+        if block_is_math(block) {
+            math_chars += n;
+        }
+    }
+    if total_chars == 0 {
+        0.0
+    } else {
+        math_chars as f32 / total_chars as f32
+    }
+}
+
+/// Minimum [`line_math_ratio`] for a whole line to be treated as a display
+/// equation (`$$…$$`) rather than prose with an inline formula. High enough
+/// that an ordinary sentence mentioning one or two math variables doesn't
+/// qualify — a display equation is typically *all* math with at most a
+/// trailing equation number.
+const DISPLAY_MATH_MIN_RATIO: f32 = 0.6;
+
+/// If `text` ends with a parenthesized run of digits/dots (an equation
+/// number like "(3)" or "(3.1)"), splits it off and returns
+/// `(body_without_number, Some(number_with_parens))`. Otherwise returns
+/// `(text, None)`. Used to keep a display equation's number outside the
+/// `$$…$$` delimiters (`$$E = mc^2$$ (3)`) rather than inside them.
+fn split_trailing_eq_number(text: &str) -> (&str, Option<&str>) {
+    let trimmed = text.trim_end();
+    if let Some(rest) = trimmed.strip_suffix(')') {
+        if let Some(open) = rest.rfind('(') {
+            let inner = &rest[open + 1..];
+            if !inner.is_empty() && inner.chars().all(|c| c.is_ascii_digit() || c == '.') {
+                return (trimmed[..open].trim_end(), Some(&trimmed[open..]));
+            }
+        }
+    }
+    (text, None)
+}
+
+/// Rebuilds a line's rendered text from its blocks, mirroring the plain
+/// space-join `render_region` uses for `line_texts`, but wraps each
+/// contiguous run of math blocks (see [`block_is_math`]) in `$…$` —
+/// best-effort inline equation demarcation. Symbols/Unicode are preserved as
+/// extracted, not converted to LaTeX (a font-position heuristic can't
+/// reconstruct real LaTeX — see the PDF math limitations in CLAUDE.md /
+/// markdown-import.md). A line with no math blocks renders identically to
+/// the plain join.
+fn render_line_with_inline_math(blocks: &[TextBlock], line: &[usize]) -> String {
+    let mut groups: Vec<(bool, String)> = Vec::new();
+    for &idx in line {
+        let block = &blocks[idx];
+        let text = block.text.trim();
+        if text.is_empty() {
+            continue;
+        }
+        let is_math = block_is_math(block);
+        match groups.last_mut() {
+            Some((last_math, last_text)) if *last_math == is_math => {
+                last_text.push(' ');
+                last_text.push_str(text);
+            }
+            _ => groups.push((is_math, text.to_string())),
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(is_math, text)| if is_math { format!("${}$", text) } else { text })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Returns the Markdown heading prefix (`"## "`, `"### "`, `"#### "`, …) for
 /// `text` if it is a numbered section heading like "3.2 Attention" or
 /// "3.2.1 Scaled Dot-Product Attention", or `None` otherwise.
@@ -544,6 +815,10 @@ fn contains_greek(text: &str) -> bool {
 /// - The title's single-character-token fraction must be
 ///   ≤ [`HEADING_TITLE_MAX_SINGLE_CHAR_TOKEN_FRACTION`] — a second net for
 ///   equation fragments that a symbol scan alone might miss.
+/// - The title must contain no interior sentence boundary
+///   ([`has_interior_sentence_boundary`]) — drops a measurement mistaken for a
+///   section number whose "title" is actually a wrapped sentence fragment
+///   (e.g. "12.75 GHz. Consequently, it realized a high gain…").
 fn numbered_heading_level(text: &str) -> Option<&'static str> {
     if !starts_with_section_number(text) {
         return None;
@@ -563,6 +838,9 @@ fn numbered_heading_level(text: &str) -> Option<&'static str> {
         return None;
     }
     if title.chars().any(|c| HEADING_TITLE_REJECT_SYMBOLS.contains(&c)) || contains_greek(title) {
+        return None;
+    }
+    if has_interior_sentence_boundary(title) {
         return None;
     }
 
@@ -585,6 +863,32 @@ fn numbered_heading_level(text: &str) -> Option<&'static str> {
         2 => "### ",
         _ => "#### ",
     })
+}
+
+/// True if `text` contains a sentence boundary — an ASCII lowercase letter
+/// immediately followed by `.`/`?`/`!` and then whitespace — anywhere but at
+/// the very end (a trailing boundary is already handled upstream by the
+/// caller's own end-of-text checks). Used by [`numbered_heading_level`] to
+/// tell a genuine short noun-phrase title
+/// ("Convergence of Algorithm 1") from a measurement mistaken for a section
+/// number whose "title" is actually a wrapped sentence fragment
+/// ("GHz. Consequently, it realized…", "GPUs. Even our base model").
+///
+/// Deliberately keyed on *lowercase*-before-`.` so an uppercase-initial
+/// abbreviation like "U.S. Policy" (the char before each `.` is uppercase)
+/// isn't mistaken for a sentence boundary.
+fn has_interior_sentence_boundary(text: &str) -> bool {
+    let chars: Vec<char> = text.chars().collect();
+    for i in 0..chars.len() {
+        if matches!(chars[i], '.' | '?' | '!')
+            && i > 0
+            && chars[i - 1].is_ascii_lowercase()
+            && chars.get(i + 1).is_some_and(|c| c.is_whitespace())
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// True if `text`, once its leader punctuation (dots, ellipsis, spaces) is
@@ -692,18 +996,58 @@ fn has_rule_between(h_rules: &[f32], y_upper: f32, y_lower: f32) -> bool {
 /// before a region is accepted as a table's "core". Two aligned rows alone
 /// can't be reliably distinguished from an incidental key:value pair (e.g.
 /// "Name: Alice" over "Role: Engineer" happening to line up); requiring a
-/// third confirms it's a genuine repeating column structure.
+/// third confirms it's a genuine repeating column structure. [`is_bordered_grid`]
+/// is the exception: a real ruled box around just 2 aligned rows is
+/// independent structural evidence standing in for the third row.
 const MIN_CORE_ROWS: usize = 3;
+
+/// True if the row range `[y_top, y_bottom]` — whose cells align to
+/// `columns` — sits inside an actual ruled box: a horizontal rule just above
+/// the first row, one just below the last, and at least one vertical rule
+/// strictly between the outermost columns (an interior column divider).
+/// Used by [`detect_table_regions`] to accept a table with only 2
+/// column-aligned rows (rather than [`MIN_CORE_ROWS`]'s 3) when the source
+/// PDF drew a real box around it — confirmed present in real bordered-table
+/// PDFs (e.g. the GAN paper's results table) where a short table legitimately
+/// has only 2-3 data rows and the borderless alignment gate alone is slower
+/// to trust it. A no-op when the page has no ruling lines at all (`h_rules`/
+/// `v_rules` empty, the common borderless case), so this never loosens
+/// borderless-table behavior.
+fn is_bordered_grid(
+    y_top: f32,
+    y_bottom: f32,
+    columns: &[f32],
+    h_rules: &[f32],
+    v_rules: &[f32],
+    tol: f32,
+) -> bool {
+    if columns.len() < 2 {
+        return false;
+    }
+    // Rule lines are collected at the midpoint of each drawn segment (see
+    // `collect_horizontal_rules`/`collect_vertical_rules`), so "just above/
+    // below" allows a couple of tolerance-widths of slack rather than an
+    // exact match.
+    let margin = tol * 2.0;
+    let has_top_rule = h_rules.iter().any(|&y| y > y_top && y <= y_top + margin);
+    let has_bottom_rule = h_rules.iter().any(|&y| y < y_bottom && y >= y_bottom - margin);
+    let min_x = columns.iter().cloned().fold(f32::MAX, f32::min);
+    let max_x = columns.iter().cloned().fold(f32::MIN, f32::max);
+    let has_interior_v_rule = v_rules.iter().any(|&x| x > min_x + tol && x < max_x - tol);
+    has_top_rule && has_bottom_rule && has_interior_v_rule
+}
 
 /// Detects table regions across a page's visual lines using conservative
 /// geometry clustering: a region only starts where at least `MIN_CORE_ROWS`
-/// consecutive lines share the same ≥2 column positions (the "core" rows),
-/// then extends with further aligned rows or wrapped continuation lines
-/// until neither applies.
+/// consecutive lines share the same ≥2 column positions (the "core" rows) —
+/// or, if the range is confirmed enclosed by a ruled box ([`is_bordered_grid`]),
+/// just 2 — then extends with further aligned rows or wrapped continuation
+/// lines until neither applies.
 fn detect_table_regions(
     rows: &[Vec<Cell>],
     line_ys: &[f32],
     h_rules: &[f32],
+    v_rules: &[f32],
     body_size: f32,
 ) -> Vec<TableRegion> {
     let tol = body_size;
@@ -734,8 +1078,12 @@ fn detect_table_regions(
             j += 1;
         }
         if core_end - i + 1 < MIN_CORE_ROWS {
-            i += 1;
-            continue;
+            let bordered = core_end > i
+                && is_bordered_grid(line_ys[i], line_ys[core_end], &columns, h_rules, v_rules, tol);
+            if !bordered {
+                i += 1;
+                continue;
+            }
         }
 
         let mut logical_rows: Vec<Vec<String>> = rows[i..=core_end]
@@ -862,6 +1210,42 @@ fn collect_horizontal_rules(page: &PdfPage) -> Vec<f32> {
 
     h_rules.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     h_rules
+}
+
+/// Collects near-vertical ruling-line x-positions from a page's path
+/// objects — the same scan as [`collect_horizontal_rules`], mirrored for the
+/// opposite axis (long run in y, negligible change in x), used to confirm a
+/// bordered/ruled table box in [`is_bordered_grid`].
+fn collect_vertical_rules(page: &PdfPage) -> Vec<f32> {
+    let mut v_rules: Vec<f32> = Vec::new();
+
+    for obj in page.objects().iter() {
+        let Some(path_obj) = obj.as_path_object() else {
+            continue;
+        };
+        let segments = match obj.matrix() {
+            Ok(m) => path_obj.segments().transform(m),
+            Err(_) => path_obj.segments(),
+        };
+
+        let mut prev: Option<(f32, f32)> = None;
+        for seg in segments.iter() {
+            let (x, y) = seg.point();
+            let (x, y) = (x.value, y.value);
+            if let Some((px, py)) = prev {
+                let dx = (x - px).abs();
+                let dy = (y - py).abs();
+                // Near-vertical: long run in y, negligible change in x.
+                if dx < 1.0 && dy > 4.0 {
+                    v_rules.push((x + px) / 2.0);
+                }
+            }
+            prev = Some((x, y));
+        }
+    }
+
+    v_rules.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    v_rules
 }
 
 /// Minimum number of distinct visual lines that must show independent,
@@ -1388,6 +1772,12 @@ fn filter_repeated_images(blocks: &[TextBlock], repeated_images: &HashSet<String
 struct PageContent {
     blocks: Vec<TextBlock>,
     h_rules: Vec<f32>,
+    /// Vertical ruling-line x-positions (see [`collect_vertical_rules`]),
+    /// paired with `h_rules` to confirm a bordered/ruled table box in
+    /// [`is_bordered_grid`]. Empty for a page with no drawn table borders —
+    /// the common case — which keeps `detect_table_regions` behaving exactly
+    /// as before this field existed.
+    v_rules: Vec<f32>,
     /// Page height in PDF points, used to define the top/bottom margin bands
     /// scanned for repeated running headers/footers.
     height: f32,
@@ -1434,6 +1824,7 @@ fn extract_page_blocks(
             // detection. Falls back to `x` (a zero-width block) if pdfium
             // can't report bounds for this object.
             let x_end = obj.bounds().map(|b| b.right().value).unwrap_or(x);
+            let font_name = text_obj.font().name();
             blocks.push(TextBlock {
                 x,
                 x_end,
@@ -1441,6 +1832,7 @@ fn extract_page_blocks(
                 font_size,
                 text,
                 is_image: false,
+                font_name,
             });
         } else if let Some(image_obj) = obj.as_image_object() {
             let (x, y) = match obj.matrix() {
@@ -1481,6 +1873,7 @@ fn extract_page_blocks(
                 font_size: 0.0,
                 text: md,
                 is_image: true,
+                font_name: String::new(),
             });
         }
     }
@@ -1541,7 +1934,12 @@ fn document_body_size(pages: &[PageContent]) -> f32 {
     sizes[sizes.len() / 2]
 }
 
-fn render_page_blocks(blocks: &[TextBlock], h_rules: &[f32], heading_body_size: f32) -> String {
+fn render_page_blocks(
+    blocks: &[TextBlock],
+    h_rules: &[f32],
+    v_rules: &[f32],
+    heading_body_size: f32,
+) -> String {
     if blocks.is_empty() {
         return String::new();
     }
@@ -1579,17 +1977,17 @@ fn render_page_blocks(blocks: &[TextBlock], h_rules: &[f32], heading_body_size: 
     // a detected gutter splits the page into full-width dividers and
     // two-column bands, each rendered as its own region.
     match detect_gutter(blocks) {
-        None => render_region(blocks, &all_indices, body_size, heading_body_size, h_rules),
+        None => render_region(blocks, &all_indices, body_size, heading_body_size, h_rules, v_rules),
         Some(gutter) => {
             let mut out = String::new();
             for region in segment_page(blocks, gutter, body_size) {
                 match region {
                     Region::Full(indices) => {
-                        out.push_str(&render_region(blocks, &indices, body_size, heading_body_size, h_rules));
+                        out.push_str(&render_region(blocks, &indices, body_size, heading_body_size, h_rules, v_rules));
                     }
                     Region::TwoCol { left, right } => {
-                        out.push_str(&render_region(blocks, &left, body_size, heading_body_size, h_rules));
-                        out.push_str(&render_region(blocks, &right, body_size, heading_body_size, h_rules));
+                        out.push_str(&render_region(blocks, &left, body_size, heading_body_size, h_rules, v_rules));
+                        out.push_str(&render_region(blocks, &right, body_size, heading_body_size, h_rules, v_rules));
                     }
                 }
             }
@@ -1750,6 +2148,42 @@ fn render_toc_region(line_texts: &[String], is_image_line: &[bool], start: usize
     out
 }
 
+/// Returns a character-weighted representative font size for one visual
+/// line's non-image blocks, used by `render_region`'s font-ratio heading
+/// classifier instead of the line's raw maximum font size.
+///
+/// A plain maximum is fooled by a drop-cap: one oversized initial glyph on an
+/// otherwise body-sized line inflates the line's max far past the heading
+/// ratio thresholds, misclassifying ordinary body text as a top-level
+/// heading (e.g. a "T" drop cap making "T systems are posing challenges…"
+/// read as `# `). Weighting by each run's character count and taking the
+/// size at the 50%-cumulative-character mark means a single-character
+/// oversized run can't dominate: it's outvoted by the many body-sized
+/// characters around it. A genuinely large-font heading, where most or all
+/// characters share the big size, still resolves to that size — unchanged
+/// from the old maximum for that common case.
+fn char_weighted_median_font_size(blocks: &[TextBlock], line: &[usize]) -> f32 {
+    let mut sized: Vec<(f32, usize)> = line
+        .iter()
+        .filter(|&&idx| !blocks[idx].is_image)
+        .map(|&idx| (blocks[idx].font_size, blocks[idx].text.chars().count().max(1)))
+        .collect();
+    if sized.is_empty() {
+        return 0.0;
+    }
+    sized.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let total_chars: usize = sized.iter().map(|&(_, n)| n).sum();
+    let half = total_chars / 2;
+    let mut cumulative = 0usize;
+    for &(size, n) in &sized {
+        cumulative += n;
+        if cumulative > half {
+            return size;
+        }
+    }
+    sized.last().map(|&(size, _)| size).unwrap_or(0.0)
+}
+
 /// Renders one reading-order region of a page as Markdown — either the
 /// whole page (no multi-column layout detected) or a single column of a
 /// two-column band. Groups the region's blocks into visual lines top to
@@ -1764,6 +2198,7 @@ fn render_region(
     body_size: f32,
     heading_body_size: f32,
     h_rules: &[f32],
+    v_rules: &[f32],
 ) -> String {
     if indices.is_empty() {
         return String::new();
@@ -1856,7 +2291,7 @@ fn render_region(
         })
         .collect();
     let line_ys: Vec<f32> = lines.iter().map(|line| blocks[line[0]].y).collect();
-    let regions = detect_table_regions(&rows, &line_ys, h_rules, body_size);
+    let regions = detect_table_regions(&rows, &line_ys, h_rules, v_rules, body_size);
 
     let mut out = String::new();
     let mut prev_y = f32::MAX;
@@ -1922,10 +2357,7 @@ fn render_region(
             continue;
         }
 
-        let max_font = line
-            .iter()
-            .map(|&idx| blocks[idx].font_size)
-            .fold(0.0f32, f32::max);
+        let max_font = char_weighted_median_font_size(blocks, line);
         let y = line_ys[i];
         let is_image_line = image_line_flags[i];
 
@@ -1974,10 +2406,21 @@ fn render_region(
         // sentence/wrap punctuation. Without this, a font-size baseline
         // that's even slightly off (see `document_body_size`) can promote an
         // ordinary wrapped sentence — or a large-font bullet — to a heading
-        // just because its font happens to clear the ratio.
+        // just because its font happens to clear the ratio. The last two
+        // guards catch shapes that can otherwise slip past font size alone: a
+        // two-column extraction artifact where the line is literally two
+        // copies of the same run back-to-back (`is_duplicated_halves`), and
+        // an author byline whose mid-line initial happens to sit at a large
+        // font size (`looks_like_author_byline`).
+        let is_layout_artifact =
+            is_duplicated_halves(line_text) || looks_like_author_byline(line_text);
+        // clippy's De Morgan's-law rewrite of this chain (one fully negated
+        // `||` clause) reads worse than the positive-guard form kept here.
+        #[allow(clippy::nonminimal_bool)]
         let heading_shape_ok = !is_list
             && line_text.chars().count() <= 80
-            && !(line_text.ends_with('.') || line_text.ends_with(','));
+            && !(line_text.ends_with('.') || line_text.ends_with(','))
+            && !is_layout_artifact;
 
         // Classify heading level: first try the numbered-section pattern
         // (font-size-independent — see `numbered_heading_level`, which
@@ -2003,15 +2446,41 @@ fn render_region(
             ""
         };
 
+        // A whole line dominated by math blocks (see `line_math_ratio`) is
+        // rendered as its own display equation rather than folded into
+        // paragraph prose — but only once it's cleared every other
+        // classification above (heading/list/image/TOC), so a numbered
+        // subsection heading that happens to contain a formula fragment
+        // still renders as a heading, not a `$$…$$` block.
+        let is_display_math = !is_image_line
+            && !is_list
+            && heading.is_empty()
+            && line_math_ratio(blocks, line) >= DISPLAY_MATH_MIN_RATIO;
+
         if !heading.is_empty() || is_image_line || is_list {
             flush_paragraph(&mut out, &mut paragraph);
             out.push_str(heading);
-            out.push_str(line_text);
+            if is_image_line {
+                out.push_str(&with_caption_alt(line_text, &line_texts, i));
+            } else {
+                out.push_str(line_text);
+            }
+            out.push_str("\n\n");
+        } else if is_display_math {
+            flush_paragraph(&mut out, &mut paragraph);
+            let (body, eq_number) = split_trailing_eq_number(line_text);
+            out.push_str("$$");
+            out.push_str(body.trim());
+            out.push_str("$$");
+            if let Some(n) = eq_number {
+                out.push(' ');
+                out.push_str(n);
+            }
             out.push_str("\n\n");
         } else if paragraph.is_empty() {
-            paragraph.push_str(line_text);
+            paragraph.push_str(&render_line_with_inline_math(blocks, line));
         } else {
-            append_wrapped(&mut paragraph, line_text);
+            append_wrapped(&mut paragraph, &render_line_with_inline_math(blocks, line));
         }
 
         prev_y = y;
@@ -2070,6 +2539,78 @@ mod tests {
     }
 
     #[test]
+    fn test_all_caps_heading_rejects_duplicated_columns() {
+        // Real regressions: a two-column extraction artifact where pdfium
+        // merged the left and right column runs into one line, and the
+        // right column happened to repeat the left column verbatim.
+        assert!(!is_all_caps_heading("AIS AIS"));
+        assert!(!is_all_caps_heading("EN-DE EN-FR EN-DE EN-FR"));
+    }
+
+    #[test]
+    fn test_all_caps_heading_rejects_author_bylines() {
+        // Real regressions: author bylines, all-caps like a real heading but
+        // carrying a mid-line single-letter initial.
+        assert!(!is_all_caps_heading("RICHARD W. ZIOLKOWSKI"));
+        assert!(!is_all_caps_heading("AND NELSON J. G. FONSECA"));
+    }
+
+    #[test]
+    fn test_all_caps_heading_keeps_lettered_subsection_headings() {
+        // A real lettered subsection heading has its letter-dot label at
+        // token index 0, not mid-line like a byline's initial — must still
+        // be accepted.
+        assert!(is_all_caps_heading("A. RUZE LENS"));
+        assert!(is_all_caps_heading("I. INTRODUCTION"));
+    }
+
+    #[test]
+    fn test_is_duplicated_halves() {
+        assert!(is_duplicated_halves("AIS AIS"));
+        assert!(is_duplicated_halves("EN-DE EN-FR EN-DE EN-FR"));
+        assert!(is_duplicated_halves("Intractable, may be Intractable, may be"));
+        assert!(!is_duplicated_halves("INDEX TERMS"));
+        assert!(!is_duplicated_halves("ABSTRACT"));
+        assert!(!is_duplicated_halves("ONE"));
+        // Odd token count can't split into equal halves.
+        assert!(!is_duplicated_halves("ONE TWO THREE"));
+    }
+
+    #[test]
+    fn test_looks_like_author_byline() {
+        assert!(looks_like_author_byline("RICHARD W. ZIOLKOWSKI"));
+        assert!(looks_like_author_byline("AND NELSON J. G. FONSECA"));
+        assert!(!looks_like_author_byline("A. RUZE LENS"));
+        assert!(!looks_like_author_byline("I. INTRODUCTION"));
+    }
+
+    #[test]
+    fn test_char_weighted_median_font_size_ignores_drop_cap() {
+        // Real regression: a single oversized drop-cap glyph ("T") on an
+        // otherwise body-sized line used to inflate the line's raw max font
+        // size past the heading thresholds. Weighted by character count, the
+        // ~50 body-sized characters around it should dominate.
+        let blocks = vec![
+            text_block_sized(0.0, 0.0, "T", 40.0),
+            text_block_sized(20.0, 0.0, "systems are posing challenges to the network", 10.0),
+        ];
+        let line = vec![0, 1];
+        assert_eq!(char_weighted_median_font_size(&blocks, &line), 10.0);
+    }
+
+    #[test]
+    fn test_char_weighted_median_font_size_keeps_uniform_heading() {
+        // A genuinely large-font heading, where all characters share the big
+        // size, must still resolve to that size (unchanged from a raw max).
+        let blocks = vec![
+            text_block_sized(0.0, 0.0, "Introduction", 24.0),
+            text_block_sized(150.0, 0.0, "Overview", 24.0),
+        ];
+        let line = vec![0, 1];
+        assert_eq!(char_weighted_median_font_size(&blocks, &line), 24.0);
+    }
+
+    #[test]
     fn test_numbered_heading_level_detects_depth() {
         assert_eq!(numbered_heading_level("1 Introduction"), Some("## "));
         assert_eq!(numbered_heading_level("3.2 Attention"), Some("### "));
@@ -2097,6 +2638,157 @@ mod tests {
         assert_eq!(
             numbered_heading_level("4.1 Global Optimality of p g = p data"),
             None
+        );
+    }
+
+    #[test]
+    fn test_numbered_heading_level_rejects_measurement_sentence_fragments() {
+        // Real regressions: a measurement mistaken for a section number,
+        // whose "title" is actually a wrapped sentence fragment carrying an
+        // interior sentence boundary.
+        assert_eq!(
+            numbered_heading_level("12.75 GHz. Consequently, it realized a high gain and a wide"),
+            None
+        );
+        assert_eq!(
+            numbered_heading_level("100 GHz. Consequently, it is envisioned that 6G will"),
+            None
+        );
+        assert_eq!(
+            numbered_heading_level("8 P100 GPUs. Even our base model"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_numbered_heading_level_keeps_real_titles_with_no_interior_boundary() {
+        assert_eq!(numbered_heading_level("1 Introduction"), Some("## "));
+        assert_eq!(numbered_heading_level("3.2 Attention"), Some("### "));
+        assert_eq!(
+            numbered_heading_level("4.2 Convergence of Algorithm 1"),
+            Some("### ")
+        );
+    }
+
+    #[test]
+    fn test_has_interior_sentence_boundary() {
+        assert!(has_interior_sentence_boundary("GHz. Consequently, it realized"));
+        assert!(has_interior_sentence_boundary("GPUs. Even our base model"));
+        assert!(!has_interior_sentence_boundary("Convergence of Algorithm 1"));
+        assert!(!has_interior_sentence_boundary("Scaled Dot-Product Attention"));
+        // Uppercase-before-dot abbreviation isn't a sentence boundary.
+        assert!(!has_interior_sentence_boundary("U.S. Policy"));
+    }
+
+    #[test]
+    fn test_is_math_font_recognizes_computer_modern_and_amsmath() {
+        // Confirmed against the GAN paper's actual (subset-prefixed) font
+        // dictionary.
+        assert!(is_math_font("ZYPRQG+CMMI10"));
+        assert!(is_math_font("ZRBHNJ+CMSY7"));
+        assert!(is_math_font("QYOIUU+CMEX10"));
+        assert!(is_math_font("XSBJNE+MSBM10"));
+        assert!(is_math_font("EFNJYN+CMMIB7"));
+    }
+
+    #[test]
+    fn test_is_math_font_recognizes_mathtype() {
+        // Confirmed against the antenna-review paper's actual font dictionary.
+        assert!(is_math_font("RMTMI"));
+        assert!(is_math_font("RMTMIB"));
+        assert!(is_math_font("MTSYN"));
+        assert!(is_math_font("MTSYB"));
+        assert!(is_math_font("MTEX"));
+    }
+
+    #[test]
+    fn test_is_math_font_rejects_body_and_bold_text_fonts() {
+        assert!(!is_math_font("NimbusRomNo9L-Regu"));
+        assert!(!is_math_font("Times-Roman"));
+        assert!(!is_math_font("TTZAKG+CMBX10")); // Computer Modern Bold Extended: bold text, not math
+        assert!(!is_math_font("TimesLTStd-Italic"));
+    }
+
+    #[test]
+    fn test_block_is_math_falls_back_to_symbol_density() {
+        // No recognized math font name, but text is dense in math symbols —
+        // still classified as math (e.g. a formula typeset without a
+        // dedicated math font subset).
+        let mut block = text_block(0.0, 0.0, "∑ x ∈ X ∇ θ ≤ ∞");
+        block.font_name = "Times-Roman".to_string();
+        assert!(block_is_math(&block));
+
+        // Ordinary prose with an incidental symbol or two isn't math.
+        let mut prose = text_block(0.0, 0.0, "the temperature rose 4×6 degrees today");
+        prose.font_name = "Times-Roman".to_string();
+        assert!(!block_is_math(&prose));
+    }
+
+    #[test]
+    fn test_render_line_with_inline_math_wraps_only_math_runs() {
+        let mut var_x = text_block(0.0, 0.0, "the vector x");
+        var_x.x_end = 90.0;
+        let mut math_run = text_block(95.0, 0.0, "∇θ log D(x)");
+        math_run.font_name = "ZYPRQG+CMMI10".to_string();
+        math_run.x_end = 200.0;
+        let mut tail = text_block(205.0, 0.0, "is the gradient.");
+        tail.x_end = 300.0;
+        let blocks = vec![var_x, math_run, tail];
+        let line = vec![0usize, 1, 2];
+        assert_eq!(
+            render_line_with_inline_math(&blocks, &line),
+            "the vector x $∇θ log D(x)$ is the gradient."
+        );
+    }
+
+    #[test]
+    fn test_render_line_with_inline_math_matches_plain_join_when_no_math() {
+        let blocks = vec![text_block(0.0, 0.0, "Hello"), text_block(60.0, 0.0, "World")];
+        let line = vec![0usize, 1];
+        assert_eq!(render_line_with_inline_math(&blocks, &line), "Hello World");
+    }
+
+    #[test]
+    fn test_line_math_ratio_weights_by_char_count() {
+        let mut math_block = text_block(0.0, 0.0, "min max V(D,G)");
+        math_block.font_name = "ZYPRQG+CMMI10".to_string();
+        let label = text_block(150.0, 0.0, "G");
+        let blocks = vec![math_block, label];
+        let line = vec![0usize, 1];
+        assert!(line_math_ratio(&blocks, &line) >= DISPLAY_MATH_MIN_RATIO);
+    }
+
+    #[test]
+    fn test_split_trailing_eq_number_extracts_parenthesized_number() {
+        assert_eq!(
+            split_trailing_eq_number("E = mc^2 (3)"),
+            ("E = mc^2", Some("(3)"))
+        );
+        assert_eq!(
+            split_trailing_eq_number("min max V(D,G) (1.2)"),
+            ("min max V(D,G)", Some("(1.2)"))
+        );
+    }
+
+    #[test]
+    fn test_split_trailing_eq_number_no_trailing_parens_is_noop() {
+        assert_eq!(
+            split_trailing_eq_number("no trailing parens here"),
+            ("no trailing parens here", None)
+        );
+    }
+
+    #[test]
+    fn test_split_trailing_eq_number_cannot_distinguish_citation_year() {
+        // Known limitation: a trailing all-digit parenthetical is split off
+        // as if it were an equation number even when it's actually a
+        // citation year — the digits-only shape is identical either way, and
+        // this helper only ever runs on lines already gated as
+        // display-math-dominant (`DISPLAY_MATH_MIN_RATIO`), so an ordinary
+        // citation sentence never reaches it in practice.
+        assert_eq!(
+            split_trailing_eq_number("as shown by GoodFellow (2014)"),
+            ("as shown by GoodFellow", Some("(2014)"))
         );
     }
 
@@ -2144,6 +2836,7 @@ mod tests {
             font_size: 12.0,
             text: text.to_string(),
             is_image: false,
+            font_name: String::new(),
         }
     }
 
@@ -2193,7 +2886,7 @@ mod tests {
             aligned_row(&[(0.0, "0.2"), (100.0, "2024-08-07"), (200.0, "ITD")]),
         ];
         let line_ys = vec![300.0, 280.0, 260.0];
-        let regions = detect_table_regions(&rows, &line_ys, &[], 12.0);
+        let regions = detect_table_regions(&rows, &line_ys, &[], &[], 12.0);
         assert_eq!(regions.len(), 1);
         let region = &regions[0];
         assert_eq!(region.start_line, 0);
@@ -2216,7 +2909,7 @@ mod tests {
             aligned_row(&[(0.0, "Third bullet")]),
         ];
         let ys = vec![300.0, 280.0, 260.0];
-        assert!(detect_table_regions(&single_col, &ys, &[], 12.0).is_empty());
+        assert!(detect_table_regions(&single_col, &ys, &[], &[], 12.0).is_empty());
 
         // A 2-line key:value block (2 aligned columns, but only 2 rows) is
         // exactly the incidental-alignment case MIN_CORE_ROWS guards against.
@@ -2225,7 +2918,59 @@ mod tests {
             aligned_row(&[(0.0, "Role:"), (100.0, "Engineer")]),
         ];
         let ys2 = vec![300.0, 280.0];
-        assert!(detect_table_regions(&key_value, &ys2, &[], 12.0).is_empty());
+        assert!(detect_table_regions(&key_value, &ys2, &[], &[], 12.0).is_empty());
+    }
+
+    #[test]
+    fn test_detect_table_regions_bordered_grid_accepts_two_rows() {
+        // Same 2-row "key:value"-shaped rows as the conservative-gate case
+        // above (which stays empty when borderless), but here bounded by a
+        // real ruled box: a rule just above the first row, one just below
+        // the last, and an interior vertical divider between the two
+        // columns — the independent structural evidence `is_bordered_grid`
+        // accepts in place of `MIN_CORE_ROWS`'s third aligned row. Modeled
+        // on a genuinely short bordered table (2-3 data rows), the shape
+        // seen in the GAN paper's results table.
+        let rows = vec![
+            aligned_row(&[(0.0, "Name:"), (100.0, "Alice")]),
+            aligned_row(&[(0.0, "Role:"), (100.0, "Engineer")]),
+        ];
+        let ys = vec![300.0, 280.0];
+        let h_rules = vec![305.0, 275.0]; // just above row 0, just below row 1
+        let v_rules = vec![50.0]; // interior divider between columns at 0.0 and 100.0
+        let regions = detect_table_regions(&rows, &ys, &h_rules, &v_rules, 12.0);
+        assert_eq!(regions.len(), 1);
+        assert_eq!(regions[0].logical_rows.len(), 2);
+    }
+
+    #[test]
+    fn test_detect_table_regions_bordered_grid_requires_interior_v_rule() {
+        // Top and bottom rules alone (no interior vertical divider) aren't
+        // enough — a horizontal rule above/below a 2-line paragraph pair is
+        // plausible without it being a table at all.
+        let rows = vec![
+            aligned_row(&[(0.0, "Name:"), (100.0, "Alice")]),
+            aligned_row(&[(0.0, "Role:"), (100.0, "Engineer")]),
+        ];
+        let ys = vec![300.0, 280.0];
+        let h_rules = vec![305.0, 275.0];
+        assert!(detect_table_regions(&rows, &ys, &h_rules, &[], 12.0).is_empty());
+    }
+
+    #[test]
+    fn test_is_bordered_grid_requires_all_three_signals() {
+        let columns = vec![0.0, 100.0];
+        let tol = 12.0;
+        // All three present: accepted.
+        assert!(is_bordered_grid(300.0, 280.0, &columns, &[305.0, 275.0], &[50.0], tol));
+        // Missing top rule.
+        assert!(!is_bordered_grid(300.0, 280.0, &columns, &[275.0], &[50.0], tol));
+        // Missing bottom rule.
+        assert!(!is_bordered_grid(300.0, 280.0, &columns, &[305.0], &[50.0], tol));
+        // Missing interior vertical rule.
+        assert!(!is_bordered_grid(300.0, 280.0, &columns, &[305.0, 275.0], &[], tol));
+        // Fewer than 2 columns: never a grid.
+        assert!(!is_bordered_grid(300.0, 280.0, &[0.0], &[305.0, 275.0], &[50.0], tol));
     }
 
     #[test]
@@ -2240,7 +2985,7 @@ mod tests {
             aligned_row(&[(0.0, "2. INTRODUCTION ......................"), (400.0, "5")]),
         ];
         let ys = vec![400.0, 380.0, 360.0, 340.0];
-        assert!(detect_table_regions(&toc, &ys, &[], 12.0).is_empty());
+        assert!(detect_table_regions(&toc, &ys, &[], &[], 12.0).is_empty());
     }
 
     #[test]
@@ -2257,7 +3002,7 @@ mod tests {
             aligned_row(&[(0.0, "0.81"), (100.0, "2024-10-30"), (200.0, "IT feedback")]),
         ];
         let line_ys = vec![420.0, 400.0, 380.0, 360.0, 340.0];
-        let regions = detect_table_regions(&rows, &line_ys, &[], 12.0);
+        let regions = detect_table_regions(&rows, &line_ys, &[], &[], 12.0);
         assert_eq!(regions.len(), 1);
         let region = &regions[0];
         assert_eq!(region.end_line, 4);
@@ -2578,6 +3323,7 @@ mod tests {
                 font_size: 12.0,
                 text: "INDEX TERMS ".to_string(),
                 is_image: false,
+                font_name: String::new(),
             },
             TextBlock {
                 x: 238.0,
@@ -2586,6 +3332,7 @@ mod tests {
                 font_size: 12.0,
                 text: "Agentic AI, autonomous systems, adaptability".to_string(),
                 is_image: false,
+                font_name: String::new(),
             },
         ];
         for row in 0..3 {
@@ -2664,15 +3411,16 @@ mod tests {
         let body_size = 12.0;
         let gutter = detect_gutter(&blocks).expect("should detect two columns");
         let h_rules: Vec<f32> = Vec::new();
+        let v_rules: Vec<f32> = Vec::new();
         let mut out = String::new();
         for region in segment_page(&blocks, gutter, body_size) {
             match region {
                 Region::Full(indices) => {
-                    out.push_str(&render_region(&blocks, &indices, body_size, body_size, &h_rules));
+                    out.push_str(&render_region(&blocks, &indices, body_size, body_size, &h_rules, &v_rules));
                 }
                 Region::TwoCol { left, right } => {
-                    out.push_str(&render_region(&blocks, &left, body_size, body_size, &h_rules));
-                    out.push_str(&render_region(&blocks, &right, body_size, body_size, &h_rules));
+                    out.push_str(&render_region(&blocks, &left, body_size, body_size, &h_rules, &v_rules));
+                    out.push_str(&render_region(&blocks, &right, body_size, body_size, &h_rules, &v_rules));
                 }
             }
         }
@@ -2715,6 +3463,7 @@ mod tests {
                 text_block(50.0, 20.0, footer),
             ],
             h_rules: Vec::new(),
+            v_rules: Vec::new(),
             height: 800.0,
         }
     }
@@ -2892,6 +3641,82 @@ mod tests {
         assert!(bullets[1].ends_with("68"), "second entry should get 68:\n{md}");
     }
 
+    // --- Figure/table caption association ---
+
+    #[test]
+    fn test_is_caption_label_recognizes_labels_with_trailing_numeral() {
+        assert!(is_caption_label("Figure 3: Model architecture"));
+        assert!(is_caption_label("Fig. 2 Loss curves"));
+        assert!(is_caption_label("Table 1. Results"));
+        assert!(is_caption_label("表 1 結果"));
+        assert!(is_caption_label("圖 2 模型架構"));
+    }
+
+    #[test]
+    fn test_is_caption_label_recognizes_all_caps_ieee_style() {
+        // Confirmed against a real IEEE-style paper's actual caption text.
+        assert!(is_caption_label(
+            "FIGURE 1. Schematic representation of a Ruze lens with constant thickness."
+        ));
+        assert!(is_caption_label("TABLE 1. Comparison of traditional AI and agentic AI."));
+    }
+
+    #[test]
+    fn test_is_caption_label_rejects_label_word_without_numeral() {
+        assert!(!is_caption_label("Table tennis is popular"));
+        assert!(!is_caption_label("Figures like this one are common"));
+        assert!(!is_caption_label("Ordinary prose"));
+    }
+
+    #[test]
+    fn test_with_caption_alt_prefers_following_line() {
+        let line_texts = vec![
+            "![](assets/fig.png)".to_string(),
+            "Figure 3: Model architecture".to_string(),
+        ];
+        assert_eq!(
+            with_caption_alt(&line_texts[0], &line_texts, 0),
+            "![Figure 3: Model architecture](assets/fig.png)"
+        );
+    }
+
+    #[test]
+    fn test_with_caption_alt_falls_back_to_preceding_line() {
+        let line_texts = vec![
+            "Table 2: Ablation study".to_string(),
+            "![](assets/tab.png)".to_string(),
+        ];
+        assert_eq!(
+            with_caption_alt(&line_texts[1], &line_texts, 1),
+            "![Table 2: Ablation study](assets/tab.png)"
+        );
+    }
+
+    #[test]
+    fn test_with_caption_alt_noop_without_adjacent_caption() {
+        let line_texts = vec![
+            "Some unrelated paragraph.".to_string(),
+            "![](assets/fig.png)".to_string(),
+            "Another unrelated paragraph.".to_string(),
+        ];
+        assert_eq!(
+            with_caption_alt(&line_texts[1], &line_texts, 1),
+            "![](assets/fig.png)"
+        );
+    }
+
+    #[test]
+    fn test_with_caption_alt_noop_for_unsupported_image_placeholder() {
+        let line_texts = vec![
+            "*(unsupported image)*".to_string(),
+            "Figure 4: Vector diagram".to_string(),
+        ];
+        assert_eq!(
+            with_caption_alt(&line_texts[0], &line_texts, 0),
+            "*(unsupported image)*"
+        );
+    }
+
     // --- Repeated image stripping ---
 
     /// Builds an image `TextBlock` (as `extract_page_blocks` would) with the
@@ -2904,6 +3729,7 @@ mod tests {
             font_size: 0.0,
             text: text.to_string(),
             is_image: true,
+            font_name: String::new(),
         }
     }
 
@@ -2914,6 +3740,7 @@ mod tests {
                 text_block(50.0, 400.0, "Unique body text for this page"),
             ],
             h_rules: Vec::new(),
+            v_rules: Vec::new(),
             height: 800.0,
         }
     }
@@ -2979,6 +3806,7 @@ mod tests {
         let dense_page = PageContent {
             blocks: dense_page_blocks,
             h_rules: Vec::new(),
+            v_rules: Vec::new(),
             height: 800.0,
         };
 
@@ -2990,6 +3818,7 @@ mod tests {
                 12.0,
             )],
             h_rules: Vec::new(),
+            v_rules: Vec::new(),
             height: 800.0,
         };
 
@@ -3020,7 +3849,7 @@ mod tests {
         let indices = vec![0];
         let body_size = 12.0;
         let heading_body_size = 12.0; // ratio 14/12 ~= 1.17, clears the 1.15 "###" gate
-        let out = render_region(&blocks, &indices, body_size, heading_body_size, &[]);
+        let out = render_region(&blocks, &indices, body_size, heading_body_size, &[], &[]);
         assert!(
             !out.trim_start().starts_with('#'),
             "an over-length line should not become a heading even if font ratio clears the gate:\n{out}"
@@ -3033,7 +3862,7 @@ mod tests {
         let indices = vec![0];
         let body_size = 12.0;
         let heading_body_size = 12.0;
-        let out = render_region(&blocks, &indices, body_size, heading_body_size, &[]);
+        let out = render_region(&blocks, &indices, body_size, heading_body_size, &[], &[]);
         assert!(
             out.trim_start().starts_with("• "),
             "a bulleted line should render as a list item, not a heading, regardless of font size:\n{out}"
@@ -3046,10 +3875,11 @@ mod tests {
         let indices = vec![0];
         let body_size = 12.0;
         let heading_body_size = 12.0; // same font size as body: ratio path won't fire
-        let out = render_region(&blocks, &indices, body_size, heading_body_size, &[]);
+        let out = render_region(&blocks, &indices, body_size, heading_body_size, &[], &[]);
         assert!(
             out.starts_with("## J. ROADMAP FOR FUTURE RESEARCH"),
             "a genuine ALL-CAPS heading should still be promoted:\n{out}"
         );
     }
+
 }
